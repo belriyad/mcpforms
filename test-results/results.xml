@@ -1,0 +1,384 @@
+<testsuites id="" name="" tests="24" failures="1" skipped="0" errors="0" time="107.52681">
+<testsuite name="mcp-production.spec.ts" timestamp="2025-09-27T19:59:57.414Z" hostname="chromium" tests="8" failures="0" skipped="0" time="42.716" errors="0">
+<testcase name="MCPForms Production Deployment Tests › should load the production landing page successfully" classname="mcp-production.spec.ts" time="4.352">
+<system-out>
+<![CDATA[🚀 Testing Production URL: https://formgenai-4545.web.app
+PROD PAGE LOG: Failed to load resource: the server responded with a status of 404 ()
+🌐 Production Page State Analysis:
+- URL: https://formgenai-4545.web.app/
+- Title: Smart Forms AI - Business Document Generator
+- Viewport: { width: [33m1280[39m, height: [33m720[39m }
+- Elements detected: [33m0[39m
+✅ Production landing page loaded successfully
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should navigate to production admin section" classname="mcp-production.spec.ts" time="5.613">
+<system-out>
+<![CDATA[PROD PAGE LOG: Failed to load resource: the server responded with a status of 404 ()
+🔐 Admin link found, navigating...
+PROD PAGE LOG: [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o
+🔐 Production Admin Page State: https://formgenai-4545.web.app/admin/
+✅ Production admin navigation successful
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production Firebase integration" classname="mcp-production.spec.ts" time="4.996">
+<system-out>
+<![CDATA[PROD PAGE LOG: Failed to load resource: the server responded with a status of 404 ()
+🔥 Production Firebase Integration Detected: [33mfalse[39m
+⚙️ Production Firebase Config Present: [33mfalse[39m
+🎯 Production Firebase Project (formgenai-4545) Detected: [33mfalse[39m
+✅ Production Firebase integration validated
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production performance metrics" classname="mcp-production.spec.ts" time="4.402">
+<system-out>
+<![CDATA[PROD PAGE LOG: Failed to load resource: the server responded with a status of 404 ()
+⚡ Production Performance Metrics:
+- Page Load Time: 3596ms
+- DOM Content Loaded: 171.2999999988824ms
+- Load Complete: 410.7999999988824ms
+- First Paint: 2872ms
+- First Contentful Paint: 2872ms
+- Resources Loaded: [33m12[39m
+- Transfer Size: 2.69KB
+- Encoded Body Size: 2.39KB
+✅ Production performance testing completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production responsive design" classname="mcp-production.spec.ts" time="11.228">
+<system-out>
+<![CDATA[PROD PAGE LOG: Failed to load resource: the server responded with a status of 404 ()
+📱 PRODUCTION Desktop Large (1920x1080):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Desktop (1280x720):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Tablet (768x1024):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Mobile (375x667):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+✅ Production responsive design testing completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production HTTPS and security" classname="mcp-production.spec.ts" time="4.874">
+<system-out>
+<![CDATA[PROD PAGE LOG: Failed to load resource: the server responded with a status of 404 ()
+🔒 HTTPS verified: https://formgenai-4545.web.app/
+🛡️ Production Security Features:
+- Secure Context: [33mtrue[39m
+- Service Worker Support: [33mtrue[39m
+- Protocol: https:
+- Host: formgenai-4545.web.app
+✅ Production security validation completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production Firebase Functions connectivity" classname="mcp-production.spec.ts" time="4.41">
+<system-out>
+<![CDATA[🔧 Testing Firebase Functions connectivity...
+PROD PAGE LOG: Access to fetch at 'https://us-central1-formgenai-4545.cloudfunctions.net/api/templates' from origin 'https://formgenai-4545.web.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+PROD PAGE LOG: Failed to load resource: net::ERR_FAILED
+🌐 Firebase Functions Response: { error: [32m'Failed to fetch'[39m, accessible: [33mfalse[39m }
+ℹ️ Firebase Functions connectivity test inconclusive
+✅ Production Firebase Functions connectivity tested
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should validate production deployment completeness" classname="mcp-production.spec.ts" time="2.841">
+<system-out>
+<![CDATA[📊 Production Deployment Status:
+- Has Navigation: [33mfalse[39m
+- Has Main Content: [33mtrue[39m
+- Interactive Buttons: [33m0[39m
+- Navigation Links: [33m2[39m
+- Form Elements: [33m0[39m
+- Media Assets: [33m3[39m
+- Scripts Loaded: [33m14[39m
+- Stylesheets Loaded: [33m2[39m
+- Total DOM Elements: [33m56[39m
+- Document Ready State: complete
+✅ Production deployment validation completed
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="mcp-production.spec.ts" timestamp="2025-09-27T19:59:57.414Z" hostname="firefox" tests="8" failures="1" skipped="0" time="151.94" errors="0">
+<testcase name="MCPForms Production Deployment Tests › should load the production landing page successfully" classname="mcp-production.spec.ts" time="15.968">
+<system-out>
+<![CDATA[🚀 Testing Production URL: https://formgenai-4545.web.app
+🌐 Production Page State Analysis:
+- URL: https://formgenai-4545.web.app/
+- Title: Smart Forms AI - Business Document Generator
+- Viewport: { width: [33m1280[39m, height: [33m720[39m }
+- Elements detected: [33m0[39m
+✅ Production landing page loaded successfully
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should navigate to production admin section" classname="mcp-production.spec.ts" time="32.321">
+<system-out>
+<![CDATA[🔐 Admin link found, navigating...
+🔐 Production Admin Page State: https://formgenai-4545.web.app/admin/
+✅ Production admin navigation successful
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production Firebase integration" classname="mcp-production.spec.ts" time="15.605">
+<system-out>
+<![CDATA[🔥 Production Firebase Integration Detected: [33mfalse[39m
+⚙️ Production Firebase Config Present: [33mfalse[39m
+🎯 Production Firebase Project (formgenai-4545) Detected: [33mfalse[39m
+✅ Production Firebase integration validated
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production performance metrics" classname="mcp-production.spec.ts" time="10.984">
+<system-out>
+<![CDATA[⚡ Production Performance Metrics:
+- Page Load Time: 5117ms
+- DOM Content Loaded: 505ms
+- Load Complete: -2205ms
+- First Paint: 0ms
+- First Contentful Paint: 0ms
+- Resources Loaded: [33m11[39m
+- Transfer Size: 2.69KB
+- Encoded Body Size: 2.39KB
+✅ Production performance testing completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production responsive design" classname="mcp-production.spec.ts" time="13.675">
+<system-out>
+<![CDATA[📱 PRODUCTION Desktop Large (1920x1080):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Desktop (1280x720):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Tablet (768x1024):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Mobile (375x667):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+✅ Production responsive design testing completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production HTTPS and security" classname="mcp-production.spec.ts" time="9.032">
+<system-out>
+<![CDATA[🔒 HTTPS verified: https://formgenai-4545.web.app/
+🛡️ Production Security Features:
+- Secure Context: [33mtrue[39m
+- Service Worker Support: [33mtrue[39m
+- Protocol: https:
+- Host: formgenai-4545.web.app
+✅ Production security validation completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production Firebase Functions connectivity" classname="mcp-production.spec.ts" time="20.309">
+<system-out>
+<![CDATA[🔧 Testing Firebase Functions connectivity...
+🌐 Firebase Functions Response: {
+  error: [32m'NetworkError when attempting to fetch resource.'[39m,
+  accessible: [33mfalse[39m
+}
+ℹ️ Firebase Functions connectivity test inconclusive
+✅ Production Firebase Functions connectivity tested
+PROD PAGE LOG: [JavaScript Error: "Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at https://us-central1-formgenai-4545.cloudfunctions.net/api/templates. (Reason: CORS header ‘Access-Control-Allow-Origin’ missing). Status code: 404."]
+PROD PAGE LOG: [JavaScript Warning: "“formgenai-4545.web.app” has been classified as a bounce tracker. If it does not receive user activation within the next 3,600 seconds it will have its state purged."]
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should validate production deployment completeness" classname="mcp-production.spec.ts" time="34.046">
+<failure message="mcp-production.spec.ts:279:7 should validate production deployment completeness" type="FAILURE">
+<![CDATA[  [firefox] › mcp-production.spec.ts:279:7 › MCPForms Production Deployment Tests › should validate production deployment completeness 
+
+    Tearing down "context" exceeded the test timeout of 30000ms.
+
+    Error: browserContext.close: Test ended.
+    Browser logs:
+
+    <launching> C:\Users\briya\AppData\Local\ms-playwright\firefox-1490\firefox\firefox.exe -no-remote -wait-for-browser -foreground -profile C:\Users\briya\AppData\Local\Temp\playwright_firefoxdev_profile-m72LGm -juggler-pipe -silent
+    <launched> pid=30936
+    [pid=30936][err] JavaScript warning: resource://services-settings/Utils.sys.mjs, line 116: unreachable code after return statement
+    [pid=30936][out] console.warn: services.settings: Ignoring preference override of remote settings server
+    [pid=30936][out] console.warn: services.settings: Allow by setting MOZ_REMOTE_SETTINGS_DEVTOOLS=1 in the environment
+    [pid=30936][out] 
+    [pid=30936][out] Juggler listening to the pipe
+    [pid=30936][out] console.error: "Warning: unrecognized command line flag" "-foreground"
+    [pid=30936][err] JavaScript error: chrome://juggler/content/Helper.js, line 82: NS_ERROR_FAILURE: Component returned failure code: 0x80004005 (NS_ERROR_FAILURE) [nsIWebProgress.removeProgressListener]
+    [pid=30936][out] console.error: services.settings: 
+    [pid=30936][out]   Message: EmptyDatabaseError: "main/nimbus-desktop-experiments" has not been synced yet
+    [pid=30936][out]   Stack:
+    [pid=30936][out]     EmptyDatabaseError@resource://services-settings/Database.sys.mjs:19:5
+    [pid=30936][out] list@resource://services-settings/Database.sys.mjs:96:13
+    [pid=30936][out] 
+    [pid=30936][out] console.error: services.settings: 
+    [pid=30936][out]   Message: EmptyDatabaseError: "main/nimbus-secure-experiments" has not been synced yet
+    [pid=30936][out]   Stack:
+    [pid=30936][out]     EmptyDatabaseError@resource://services-settings/Database.sys.mjs:19:5
+    [pid=30936][out] list@resource://services-settings/Database.sys.mjs:96:13
+    [pid=30936][out] 
+    [pid=30936][out] console.warn: services.settings: #fetchAttachment: Forcing fallbackToDump to false due to Utils.LOAD_DUMPS being false
+    [pid=30936][out] console.error: (new NotFoundError("Could not find fa0fc42c-d91d-fca7-34eb-806ff46062dc in cache or dump", "resource://services-settings/Attachments.sys.mjs", 48))
+    [pid=30936][out] console.warn: "Unable to find the attachment for" "fa0fc42c-d91d-fca7-34eb-806ff46062dc"
+    [pid=30936][err] JavaScript error: chrome://juggler/content/Helper.js, line 82: NS_ERROR_FAILURE: Component returned failure code: 0x80004005 (NS_ERROR_FAILURE) [nsIWebProgress.removeProgressListener]
+    [pid=30936][err] 
+    [pid=30936][err] ###!!! [Parent][DispatchAsyncMessage] Error: PBackgroundIDBDatabase::Msg_PBackgroundIDBTransactionConstructor Value error: message was deserialized, but contained an illegal value
+    [pid=30936][err] 
+    [pid=30936][err] 
+    [pid=30936][err] ###!!! [Parent][DispatchAsyncMessage] Error: PBackgroundIDBDatabase::Msg_PBackgroundIDBTransactionConstructor Value error: message was deserialized, but contained an illegal value
+    [pid=30936][err] 
+    [pid=30936] <gracefully close start>
+    [pid=30936] <kill>
+    [pid=30936] <will force kill>
+    [pid=30936] taskkill stdout: SUCCESS: The process with PID 16568 (child process of PID 24400) has been terminated.
+    SUCCESS: The process with PID 19568 (child process of PID 24400) has been terminated.
+    SUCCESS: The process with PID 31136 (child process of PID 24400) has been terminated.
+    SUCCESS: The process with PID 3336 (child process of PID 24400) has been terminated.
+    SUCCESS: The process with PID 20368 (child process of PID 24400) has been terminated.
+    SUCCESS: The process with PID 32200 (child process of PID 24400) has been terminated.
+    SUCCESS: The process with PID 24400 (child process of PID 30936) has been terminated.
+    SUCCESS: The process with PID 30936 (child process of PID 33888) has been terminated.
+
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-results\mcp-production-MCPForms-Pr-c3fd7-ion-deployment-completeness-firefox\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</failure>
+<system-out>
+<![CDATA[📊 Production Deployment Status:
+- Has Navigation: [33mfalse[39m
+- Has Main Content: [33mtrue[39m
+- Interactive Buttons: [33m0[39m
+- Navigation Links: [33m2[39m
+- Form Elements: [33m0[39m
+- Media Assets: [33m3[39m
+- Scripts Loaded: [33m11[39m
+- Stylesheets Loaded: [33m2[39m
+- Total DOM Elements: [33m53[39m
+- Document Ready State: complete
+✅ Production deployment validation completed
+
+[[ATTACHMENT|mcp-production-MCPForms-Pr-c3fd7-ion-deployment-completeness-firefox\test-failed-1.png]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="mcp-production.spec.ts" timestamp="2025-09-27T19:59:57.414Z" hostname="webkit" tests="8" failures="0" skipped="0" time="49.189" errors="0">
+<testcase name="MCPForms Production Deployment Tests › should load the production landing page successfully" classname="mcp-production.spec.ts" time="6.576">
+<system-out>
+<![CDATA[🚀 Testing Production URL: https://formgenai-4545.web.app
+🌐 Production Page State Analysis:
+- URL: https://formgenai-4545.web.app/
+- Title: Smart Forms AI - Business Document Generator
+- Viewport: { width: [33m1280[39m, height: [33m720[39m }
+- Elements detected: [33m0[39m
+✅ Production landing page loaded successfully
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should navigate to production admin section" classname="mcp-production.spec.ts" time="7.907">
+<system-out>
+<![CDATA[🔐 Admin link found, navigating...
+🔐 Production Admin Page State: https://formgenai-4545.web.app/admin/
+✅ Production admin navigation successful
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production Firebase integration" classname="mcp-production.spec.ts" time="5.076">
+<system-out>
+<![CDATA[🔥 Production Firebase Integration Detected: [33mfalse[39m
+⚙️ Production Firebase Config Present: [33mfalse[39m
+🎯 Production Firebase Project (formgenai-4545) Detected: [33mfalse[39m
+✅ Production Firebase integration validated
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production performance metrics" classname="mcp-production.spec.ts" time="3.532">
+<system-out>
+<![CDATA[⚡ Production Performance Metrics:
+- Page Load Time: 2979ms
+- DOM Content Loaded: 95ms
+- Load Complete: 395.0000000000001ms
+- First Paint: 0ms
+- First Contentful Paint: 403ms
+- Resources Loaded: [33m14[39m
+- Transfer Size: 2.69KB
+- Encoded Body Size: 2.39KB
+✅ Production performance testing completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production responsive design" classname="mcp-production.spec.ts" time="12.645">
+<system-out>
+<![CDATA[📱 PRODUCTION Desktop Large (1920x1080):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Desktop (1280x720):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Tablet (768x1024):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+📱 PRODUCTION Mobile (375x667):
+- Elements detected: [33m0[39m
+- Responsive layout detected: true
+✅ Production responsive design testing completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production HTTPS and security" classname="mcp-production.spec.ts" time="4.596">
+<system-out>
+<![CDATA[🔒 HTTPS verified: https://formgenai-4545.web.app/
+🛡️ Production Security Features:
+- Secure Context: [33mtrue[39m
+- Service Worker Support: [33mtrue[39m
+- Protocol: https:
+- Host: formgenai-4545.web.app
+✅ Production security validation completed
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should test production Firebase Functions connectivity" classname="mcp-production.spec.ts" time="4.632">
+<system-out>
+<![CDATA[🔧 Testing Firebase Functions connectivity...
+PROD PAGE LOG: Origin https://formgenai-4545.web.app is not allowed by Access-Control-Allow-Origin. Status code: 404
+PROD PAGE ERROR: /us-central1-formgenai-4545.cloudfunctions.net/api/templates due to access control checks.
+PROD PAGE LOG: Failed to load resource: Origin https://formgenai-4545.web.app is not allowed by Access-Control-Allow-Origin. Status code: 404
+🌐 Firebase Functions Response: { error: [32m'Load failed'[39m, accessible: [33mfalse[39m }
+ℹ️ Firebase Functions connectivity test inconclusive
+✅ Production Firebase Functions connectivity tested
+]]>
+</system-out>
+</testcase>
+<testcase name="MCPForms Production Deployment Tests › should validate production deployment completeness" classname="mcp-production.spec.ts" time="4.225">
+<system-out>
+<![CDATA[📊 Production Deployment Status:
+- Has Navigation: [33mfalse[39m
+- Has Main Content: [33mtrue[39m
+- Interactive Buttons: [33m0[39m
+- Navigation Links: [33m2[39m
+- Form Elements: [33m0[39m
+- Media Assets: [33m3[39m
+- Scripts Loaded: [33m17[39m
+- Stylesheets Loaded: [33m2[39m
+- Total DOM Elements: [33m60[39m
+- Document Ready State: complete
+✅ Production deployment validation completed
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>

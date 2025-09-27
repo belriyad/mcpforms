@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp"],
+      "env": {
+        "PLAYWRIGHT_CONFIG": "./playwright.config.ts",
+        "PLAYWRIGHT_PROJECT": "chromium"
+      }
+    }
+  },
+  "testPatterns": {
+    "ui": "tests/**/*.spec.ts",
+    "api": "tests/api/**/*.spec.ts",
+    "e2e": "tests/e2e/**/*.spec.ts"
+  },
+  "baseConfig": {
+    "baseURL": "http://127.0.0.1:3000",
+    "timeout": 30000,
+    "retries": 2,
+    "headless": true,
+    "screenshot": "only-on-failure",
+    "video": "retain-on-failure"
+  },
+  "selectors": {
+    "firebase": {
+      "loginForm": "[data-testid='login-form']",
+      "emailInput": "input[type='email']",
+      "passwordInput": "input[type='password']",
+      "submitButton": "button[type='submit']"
+    },
+    "templates": {
+      "uploadArea": "[data-testid='template-upload']",
+      "fileInput": "input[type='file']",
+      "templateList": "[data-testid='template-list']",
+      "templateItem": "[data-testid='template-item']"
+    },
+    "services": {
+      "createButton": "[data-testid='create-service']",
+      "serviceForm": "[data-testid='service-form']",
+      "serviceList": "[data-testid='service-list']"
+    },
+    "intake": {
+      "intakeForm": "[data-testid='intake-form']",
+      "formField": "[data-testid='form-field']",
+      "submitButton": "[data-testid='submit-intake']"
+    }
+  }
+}

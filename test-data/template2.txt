@@ -1,0 +1,24 @@
+Service Agreement Template
+
+Professional Services Agreement
+
+Client Details:
+- Company Name: [COMPANY_NAME]
+- Primary Contact: [PRIMARY_CONTACT]
+- Email Address: [EMAIL_ADDRESS]
+- Billing Address: [BILLING_ADDRESS]
+
+Project Information:
+- Project Name: [PROJECT_NAME]
+- Project Scope: [PROJECT_SCOPE]
+- Timeline: [TIMELINE]
+- Budget: [BUDGET]
+
+Payment Terms:
+- Payment Schedule: [PAYMENT_SCHEDULE]
+- Payment Method: [PAYMENT_METHOD]
+
+Additional Requirements:
+- [ADDITIONAL_REQUIREMENTS]
+
+This template is used for service agreement generation.

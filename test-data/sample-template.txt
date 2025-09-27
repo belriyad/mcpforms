@@ -1,0 +1,20 @@
+Sample Contract Template
+
+This is a test template document for the MCPForms application.
+
+Client Information:
+- Name: [CLIENT_NAME]
+- Email: [CLIENT_EMAIL]
+- Business: [BUSINESS_NAME]
+
+Service Details:
+- Service Type: [SERVICE_TYPE]
+- Description: [DESCRIPTION]
+- Date: [DATE]
+
+Terms and Conditions:
+1. Payment terms will be established based on service requirements
+2. All work will be completed within agreed timeframe
+3. Client will provide necessary documentation
+
+This template is used for testing AI extraction capabilities.
