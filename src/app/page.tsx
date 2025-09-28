@@ -3,16 +3,16 @@
 export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-6">
+      <div className="container mx-auto px-4 py-8 sm:py-16">
+        <div className="text-center" data-testid="hero-section">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
             Smart Forms AI
           </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+          <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             AI-powered business document generator that transforms templates into dynamic forms
             and creates personalized documents automatically.
           </p>
-          <div className="flex justify-center space-x-4">
+          <div className="flex flex-col sm:flex-row justify-center gap-4 sm:space-x-4 sm:gap-0">
             <a
               href="/admin"
               className="btn btn-primary btn-lg"
@@ -28,7 +28,7 @@ export default function Home() {
           </div>
         </div>
         
-        <div className="mt-16 grid md:grid-cols-3 gap-8">
+        <div className="mt-8 sm:mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" data-testid="features-grid">
           <div className="card">
             <div className="card-content">
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">

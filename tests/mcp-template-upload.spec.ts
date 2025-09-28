@@ -13,6 +13,77 @@ const TEST_ENV = process.env.TEST_ENV || 'development';
 const BASE_URL = BASE_URLS[TEST_ENV as keyof typeof BASE_URLS];
 
 test.describe('MCPForms - Template Upload & Processing User Experience', () => {
+  // Helper function to navigate to templates interface in admin dashboard
+  const navigateToTemplates = async (page: any, firebaseAuth: any) => {
+    // Authenticate first
+    await firebaseAuth.login('admin@test.com', 'testpassword');
+    
+    // Navigate to admin dashboard first
+    await page.goto(`${BASE_URL}/admin`, { waitUntil: 'networkidle' });
+    
+    // Wait for admin dashboard to fully load
+    await page.waitForTimeout(2000);
+    
+    // Capture admin page elements for debugging
+    const adminElements = await page.evaluate(() => {
+      const allButtons = Array.from(document.querySelectorAll('button')).map(btn => btn.textContent?.trim()).filter(text => text);
+      const allTabs = Array.from(document.querySelectorAll('[role="tab"], .tab, nav button')).map(tab => tab.textContent?.trim()).filter(text => text);
+      const allNavigation = Array.from(document.querySelectorAll('nav *')).map(nav => nav.textContent?.trim()).filter(text => text);
+      return { buttons: allButtons, tabs: allTabs, navigation: allNavigation };
+    });
+    console.log('🔍 Admin page elements:', {
+      buttons: adminElements.buttons.slice(0, 10), // First 10 buttons
+      tabs: adminElements.tabs,
+      navigation: adminElements.navigation.slice(0, 10) // First 10 nav items
+    });
+    
+    // Click on Templates tab if it exists
+    const templatesTabSelectors = [
+      'button:has-text("Templates")',
+      '[aria-label="Tabs"] button:has-text("Templates")',
+      'nav button:has-text("Templates")',
+      '.tab:has-text("Templates")',
+      '[data-testid="templates-tab"]',
+      // Additional selectors based on the AdminDashboard component
+      'button:contains("Templates")',
+      'nav button:contains("Templates")'
+    ];
+    
+    let templatesTabClicked = false;
+    for (const selector of templatesTabSelectors) {
+      const count = await page.locator(selector).count();
+      if (count > 0) {
+        console.log(`📑 Clicking Templates tab: ${selector}`);
+        await page.locator(selector).first().click();
+        await page.waitForLoadState('networkidle');
+        templatesTabClicked = true;
+        break;
+      }
+    }
+    
+    if (!templatesTabClicked) {
+      console.log('🔍 Searching for any element containing "Templates" text...');
+      const templatesElements = await page.locator('*:has-text("Templates")').count();
+      console.log(`Found ${templatesElements} elements containing "Templates"`);
+      
+      if (templatesElements > 0) {
+        const firstTemplatesElement = page.locator('*:has-text("Templates")').first();
+        const tagName = await firstTemplatesElement.evaluate((el: Element) => el.tagName);
+        const textContent = await firstTemplatesElement.textContent();
+        console.log(`First Templates element: ${tagName} with text: "${textContent}"`);
+        
+        // Try to click it if it's clickable
+        try {
+          await firstTemplatesElement.click();
+          await page.waitForLoadState('networkidle');
+          console.log('✅ Successfully clicked Templates element');
+        } catch (error) {
+          console.log(`⚠️ Could not click Templates element: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+    }
+  };
+
   test.beforeEach(async ({ page }) => {
     // Enhanced logging for debugging
     page.on('console', msg => console.log(`[${TEST_ENV.toUpperCase()}] PAGE:`, msg.text()));
@@ -24,8 +95,11 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     });
   });
 
-  test('should navigate to admin dashboard and access template upload', async ({ page }) => {
+  test('should navigate to admin dashboard and access template upload', async ({ page, firebaseAuth }) => {
     console.log(`🚀 Testing Template Upload Flow on ${TEST_ENV}: ${BASE_URL}`);
+    
+    // Authenticate first
+    await firebaseAuth.login('admin@test.com', 'testpassword');
     
     // Navigate to the application
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
@@ -77,19 +151,20 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('🔐 Admin page URL:', adminUrl);
     expect(adminUrl).toContain('admin');
     
-    // Look for template upload section
+    // Look for template upload section after potentially clicking Templates tab
     const templateSectionSelectors = [
       // Common template section identifiers
       '[data-testid="templates"]',
       '[data-testid="template-upload"]',
       'button:has-text("Upload Template")',
+      'button:has-text("+ Upload Template")',
       'button:has-text("Add Template")',
       'input[type="file"]',
       '.template-upload',
       '.file-upload',
-      // Navigation to templates page
-      'a[href*="template"]',
-      'nav a:has-text("Template")'
+      // Template management interface
+      'h2:has-text("Template Management")',
+      '.btn:has-text("Upload")'
     ];
     
     let templateSectionFound = false;
@@ -107,10 +182,34 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
       }
     }
     
-    // If no template section found, try navigating to templates page
+    // If no template section found, try clicking Templates tab
     if (!templateSectionFound) {
-      console.log('🔄 No template section found, trying direct navigation...');
-      await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+      console.log('🔄 No template section found, looking for Templates tab...');
+      
+      // Look for the Templates tab in the admin dashboard
+      const templatesTabSelectors = [
+        'button:has-text("Templates")',
+        '[aria-label="Tabs"] button:has-text("Templates")',
+        'nav button:has-text("Templates")',
+        '.tab:has-text("Templates")',
+        '[data-testid="templates-tab"]'
+      ];
+      
+      let templatesTabFound = false;
+      for (const selector of templatesTabSelectors) {
+        const count = await page.locator(selector).count();
+        if (count > 0) {
+          console.log(`📑 Templates tab found via: ${selector}`);
+          await page.locator(selector).first().click();
+          await page.waitForLoadState('networkidle');
+          templatesTabFound = true;
+          break;
+        }
+      }
+      
+      if (!templatesTabFound) {
+        console.log('⚠️ Templates tab not found - checking if template interface is directly visible');
+      }
     }
     
     // Capture final admin state
@@ -124,9 +223,8 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('✅ Successfully accessed admin dashboard');
   });
 
-  test('should simulate template file upload process', async ({ page }) => {
-    // Navigate to admin/templates
-    await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+  test('should simulate template file upload process', async ({ page, firebaseAuth }) => {
+    await navigateToTemplates(page, firebaseAuth);
     
     console.log('📁 Testing file upload simulation...');
     
@@ -192,7 +290,7 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
           
           break; // Only test one file upload to avoid overwhelming the system
         } catch (error) {
-          console.log(`⚠️ File upload simulation note: ${error.message}`);
+          console.log(`⚠️ File upload simulation note: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
     } else {
@@ -218,8 +316,8 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('✅ File upload process simulation completed');
   });
 
-  test('should test template processing and AI field extraction', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+  test('should test template processing and AI field extraction', async ({ page, firebaseAuth }) => {
+    await navigateToTemplates(page, firebaseAuth);
     
     console.log('🤖 Testing AI template processing simulation...');
     
@@ -305,8 +403,8 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('✅ AI template processing simulation completed');
   });
 
-  test('should validate template field customization', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+  test('should validate template field customization', async ({ page, firebaseAuth }) => {
+    await navigateToTemplates(page, firebaseAuth);
     
     console.log('⚙️ Testing template field customization...');
     
@@ -376,8 +474,8 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('✅ Template field customization testing completed');
   });
 
-  test('should test template save and status tracking', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+  test('should test template save and status tracking', async ({ page, firebaseAuth }) => {
+    await navigateToTemplates(page, firebaseAuth);
     
     console.log('💾 Testing template save and status tracking...');
     
@@ -455,8 +553,8 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('✅ Template save and status tracking completed');
   });
 
-  test('should test error handling and edge cases', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+  test('should test error handling and edge cases', async ({ page, firebaseAuth }) => {
+    await navigateToTemplates(page, firebaseAuth);
     
     console.log('🚨 Testing error handling and edge cases...');
     
@@ -489,7 +587,7 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
           }
         }
       } catch (error) {
-        console.log(`ℹ️ Error simulation note: ${error.message}`);
+        console.log(`ℹ️ Error simulation note: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
     
@@ -539,8 +637,8 @@ test.describe('MCPForms - Template Upload & Processing User Experience', () => {
     console.log('✅ Error handling and edge cases testing completed');
   });
 
-  test('should validate accessibility and user experience', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/templates`, { waitUntil: 'networkidle' });
+  test('should validate accessibility and user experience', async ({ page, firebaseAuth }) => {
+    await navigateToTemplates(page, firebaseAuth);
     
     console.log('♿ Testing accessibility and user experience...');
     

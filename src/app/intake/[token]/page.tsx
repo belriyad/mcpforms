@@ -44,6 +44,17 @@ export default function IntakeFormPage() {
   const fetchIntakeData = async () => {
     try {
       const response = await fetch(`/api/intake/${token}`)
+      
+      // Check if response is ok and content-type is JSON
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Response is not JSON format')
+      }
+      
       const result = await response.json()
 
       if (!result.success) {
@@ -51,17 +62,39 @@ export default function IntakeFormPage() {
         return
       }
 
-      setIntakeData(result.data)
+      // Validate data structure
+      const data = result.data
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid intake data structure')
+      }
+      
+      // Ensure all required properties exist with sensible defaults
+      const validatedData = {
+        intakeId: data.intakeId || '',
+        serviceName: data.serviceName || 'Service Information',
+        serviceDescription: data.serviceDescription || 'Please complete the form below.',
+        formFields: Array.isArray(data.formFields) ? data.formFields : [],
+        clientData: data.clientData && typeof data.clientData === 'object' ? data.clientData : {},
+        status: data.status || 'active'
+      }
+
+      if (validatedData.formFields.length === 0) {
+        console.warn('No form fields found in intake data')
+      }
+
+      setIntakeData(validatedData)
       
       // Pre-fill form with existing data
-      if (result.data.clientData) {
-        Object.entries(result.data.clientData).forEach(([key, value]) => {
-          setValue(key, value)
+      if (validatedData.clientData && Object.keys(validatedData.clientData).length > 0) {
+        Object.entries(validatedData.clientData).forEach(([key, value]) => {
+          if (value !== null && value !== undefined) {
+            setValue(key, value)
+          }
         })
       }
     } catch (err) {
       console.error('Error fetching intake data:', err)
-      setError('Failed to load intake form')
+      setError(`Failed to load intake form: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
@@ -250,26 +283,37 @@ export default function IntakeFormPage() {
         <div className="card">
           <div className="card-content">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {intakeData.formFields.map((field) => (
-                <div key={field.id}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {field.label}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                  </label>
-                  
-                  {field.description && (
-                    <p className="text-sm text-gray-500 mb-2">{field.description}</p>
-                  )}
-                  
-                  {renderField(field)}
-                  
-                  {errors[field.name] && (
-                    <p className="text-sm text-red-600 mt-1">
-                      {errors[field.name]?.message as string}
+              {intakeData.formFields && intakeData.formFields.length > 0 ? (
+                intakeData.formFields.map((field) => (
+                  <div key={field.id}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                    </label>
+                    
+                    {field.description && (
+                      <p className="text-sm text-gray-500 mb-2">{field.description}</p>
+                    )}
+                    
+                    {renderField(field)}
+                    
+                    {errors[field.name] && (
+                      <p className="text-sm text-red-600 mt-1">
+                        {errors[field.name]?.message as string}
+                      </p>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-gray-500">
+                    <p className="text-lg font-medium">No form fields available</p>
+                    <p className="text-sm mt-2">
+                      This intake form doesn't have any fields configured yet.
                     </p>
-                  )}
+                  </div>
                 </div>
-              ))}
+              )}
 
               <div className="pt-6 border-t">
                 <div className="flex justify-between items-center">

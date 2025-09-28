@@ -841,7 +841,7 @@ test.describe('MCPForms - Advanced Scenarios & Integration Tests', () => {
     await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'networkidle' });
     
     // Collect all test data from session storage
-    const testReport = await page.evaluate(() => {
+    const testReport = await page.evaluate((testEnvironment) => {
       const collectSessionData = (prefix) => {
         const data = {};
         for (let i = 0; i < sessionStorage.length; i++) {
@@ -860,7 +860,7 @@ test.describe('MCPForms - Advanced Scenarios & Integration Tests', () => {
       const report = {
         testSuite: 'MCPForms Advanced Integration Tests',
         timestamp: new Date().toISOString(),
-        environment: process.env.TEST_ENV || 'development',
+        environment: testEnvironment,
         coverage: {
           e2eWorkflow: collectSessionData('e2eWorkflow'),
           firebase: collectSessionData('firestore_'),
@@ -883,7 +883,7 @@ test.describe('MCPForms - Advanced Scenarios & Integration Tests', () => {
       
       console.log('📊 Comprehensive test report generated:', report);
       return report;
-    });
+    }, TEST_ENV);
     
     // Validate test coverage
     const coverageAreas = [

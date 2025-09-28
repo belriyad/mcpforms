@@ -51,7 +51,22 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
         templateName: templateName.trim(),
       })
 
-      const { uploadUrl } = (result.data as any).data
+      console.log('🔄 TemplateUpload: Function response:', result)
+      console.log('🔄 TemplateUpload: Function response data:', result.data)
+
+      // Check if the function returned an error
+      if (!(result.data as any)?.success) {
+        throw new Error((result.data as any)?.error || 'Function returned error')
+      }
+
+      // Safely extract uploadUrl
+      const responseData = (result.data as any)?.data
+      if (!responseData || !responseData.uploadUrl) {
+        console.error('❌ TemplateUpload: Invalid response structure:', result.data)
+        throw new Error('Invalid response from server - missing upload URL')
+      }
+
+      const { uploadUrl } = responseData
 
       // Upload file to the signed URL
       const uploadResponse = await fetch(uploadUrl, {
@@ -69,8 +84,27 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
       toast.success('Template uploaded successfully! AI parsing will begin shortly.')
       onUploadComplete()
     } catch (error: any) {
-      console.error('Upload error:', error)
-      toast.error(error.message || 'Failed to upload template')
+      console.error('❌ TemplateUpload: Upload error:', error)
+      console.error('❌ TemplateUpload: Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        stack: error.stack
+      })
+      
+      let errorMessage = 'Failed to upload template'
+      
+      if (error.code === 'functions/unauthenticated') {
+        errorMessage = 'Authentication required. Please sign in and try again.'
+      } else if (error.code === 'functions/permission-denied') {
+        errorMessage = 'Permission denied. Check your Firebase security rules.'
+      } else if (error.code === 'functions/unavailable') {
+        errorMessage = 'Firebase Functions unavailable. Check your connection and try again.'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      toast.error(errorMessage)
     } finally {
       setUploading(false)
     }

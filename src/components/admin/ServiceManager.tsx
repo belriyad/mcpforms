@@ -28,30 +28,49 @@ export default function ServiceManager() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    console.log('⚙️ ServiceManager: Setting up Firestore listeners')
+    setError(null)
+    
     // Load services
     const servicesQuery = query(collection(db, 'services'))
-    const unsubscribeServices = onSnapshot(servicesQuery, (snapshot) => {
-      const servicesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Service[]
-      
-      setServices(servicesData.sort((a, b) => b.createdAt?.toDate() - a.createdAt?.toDate()))
-    })
+    const unsubscribeServices = onSnapshot(servicesQuery, 
+      (snapshot) => {
+        console.log('⚙️ ServiceManager: Received services snapshot with', snapshot.docs.length, 'documents')
+        const servicesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Service[]
+        
+        setServices(servicesData.sort((a, b) => b.createdAt?.toDate() - a.createdAt?.toDate()))
+      },
+      (error) => {
+        console.error('❌ ServiceManager: Services error:', error)
+        setError(`Services error: ${error.message}`)
+      }
+    )
 
     // Load templates
     const templatesQuery = query(collection(db, 'templates'))
-    const unsubscribeTemplates = onSnapshot(templatesQuery, (snapshot) => {
-      const templatesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Template[]
-      
-      setTemplates(templatesData.filter(t => t.status === 'parsed'))
-      setLoading(false)
-    })
+    const unsubscribeTemplates = onSnapshot(templatesQuery, 
+      (snapshot) => {
+        console.log('⚙️ ServiceManager: Received templates snapshot with', snapshot.docs.length, 'documents')
+        const templatesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Template[]
+        
+        setTemplates(templatesData.filter(t => t.status === 'parsed'))
+        setLoading(false)
+      },
+      (error) => {
+        console.error('❌ ServiceManager: Templates error:', error)
+        setError(`Templates error: ${error.message}`)
+        setLoading(false)
+      }
+    )
 
     return () => {
       unsubscribeServices()
@@ -102,6 +121,16 @@ export default function ServiceManager() {
     return (
       <div className="flex justify-center py-12">
         <LoadingSpinner />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <h3 className="text-red-800 font-medium">Connection Error</h3>
+        <p className="text-red-600 mt-1">{error}</p>
+        <p className="text-red-600 text-sm mt-2">Check your internet connection and Firebase configuration.</p>
       </div>
     )
   }

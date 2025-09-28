@@ -8,12 +8,12 @@ import TemplateUpload from './TemplateUpload'
 
 interface Template {
   id: string
-  name: string
-  originalFileName: string
-  fileType: string
+  name?: string
+  originalFileName?: string
+  fileType?: string
   status: 'uploaded' | 'parsing' | 'parsed' | 'error'
-  extractedFields: any[]
-  createdAt: any
+  extractedFields?: any[]
+  createdAt?: any
   errorMessage?: string
 }
 
@@ -21,19 +21,31 @@ export default function TemplateManager() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    console.log('📊 TemplateManager: Setting up Firestore listener')
     const q = query(collection(db, 'templates'))
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const templatesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Template[]
-      
-      setTemplates(templatesData.sort((a, b) => b.createdAt?.toDate() - a.createdAt?.toDate()))
-      setLoading(false)
-    })
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        console.log('📊 TemplateManager: Received snapshot with', snapshot.docs.length, 'documents')
+        const templatesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Template[]
+        
+        setTemplates(templatesData.sort((a, b) => b.createdAt?.toDate() - a.createdAt?.toDate()))
+        setLoading(false)
+      },
+      (error) => {
+        console.error('❌ TemplateManager: Firestore error:', error)
+        console.error('❌ TemplateManager: Error code:', error.code)
+        console.error('❌ TemplateManager: Error message:', error.message)
+        setError(`Failed to load templates: ${error.message}`)
+        setLoading(false)
+      }
+    )
 
     return unsubscribe
   }, [])
@@ -67,6 +79,16 @@ export default function TemplateManager() {
     return (
       <div className="flex justify-center py-12">
         <LoadingSpinner />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <h3 className="text-red-800 font-medium">Connection Error</h3>
+        <p className="text-red-600 mt-1">{error}</p>
+        <p className="text-red-600 text-sm mt-2">Check your internet connection and Firebase configuration.</p>
       </div>
     )
   }
@@ -105,21 +127,21 @@ export default function TemplateManager() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-6">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" data-testid="template-grid">
           {templates.map((template) => (
             <div key={template.id} className="card">
               <div className="card-content">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">{template.name || 'Unnamed Template'}</h3>
                       {getStatusBadge(template.status)}
                     </div>
                     <p className="text-sm text-gray-500 mb-2">
-                      File: {template.originalFileName} ({template.fileType.toUpperCase()})
+                      File: {template.originalFileName || 'Unknown'} {template.fileType ? `(${template.fileType.toUpperCase()})` : ''}
                     </p>
                     <p className="text-sm text-gray-500">
-                      Uploaded: {template.createdAt?.toDate().toLocaleDateString()}
+                      Uploaded: {template.createdAt?.toDate()?.toLocaleDateString() || 'Unknown'}
                     </p>
                     
                     {template.status === 'parsed' && (
@@ -131,7 +153,7 @@ export default function TemplateManager() {
                           <div className="mt-2 flex flex-wrap gap-1">
                             {template.extractedFields.slice(0, 5).map((field, index) => (
                               <span key={index} className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
-                                {field.label}
+                                {field?.label || 'Unknown Field'}
                               </span>
                             ))}
                             {template.extractedFields.length > 5 && (
