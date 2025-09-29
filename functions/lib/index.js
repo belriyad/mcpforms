@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.intakeFormAPI = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.uploadTemplateAndParse = void 0;
+exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.intakeFormAPI = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
 const functions = __importStar(require("firebase-functions"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
@@ -50,6 +50,11 @@ exports.uploadTemplateAndParse = functions
     secrets: ["OPENAI_API_KEY"]
 })
     .https.onCall(templateParser_1.templateParser.uploadAndParse);
+exports.processUploadedTemplate = functions
+    .runWith({
+    secrets: ["OPENAI_API_KEY"]
+})
+    .https.onCall(templateParser_1.templateParser.processUploadedTemplate);
 // Service Request Management
 exports.createServiceRequest = functions.https.onCall(serviceManager_1.serviceManager.createService);
 exports.updateServiceRequest = functions.https.onCall(serviceManager_1.serviceManager.updateService);

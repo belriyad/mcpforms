@@ -303,7 +303,22 @@ function GenerateIntakeLinkForm({ onClose, onLinkGenerated }: { onClose: () => v
         expiresInDays,
       })
 
-      const { intakeUrl } = (result.data as any).data
+      console.log('🔗 IntakeMonitor: Function response:', result)
+      console.log('🔗 IntakeMonitor: Function response data:', result.data)
+
+      // Check if the function returned an error
+      if (!(result.data as any)?.success) {
+        throw new Error((result.data as any)?.error || 'Function returned error')
+      }
+
+      // Safely extract intakeUrl
+      const responseData = (result.data as any)?.data
+      if (!responseData || !responseData.intakeUrl) {
+        console.error('❌ IntakeMonitor: Invalid response structure:', result.data)
+        throw new Error('Invalid response from server - missing intake URL')
+      }
+
+      const { intakeUrl } = responseData
       
       // Copy to clipboard
       navigator.clipboard.writeText(intakeUrl)
@@ -311,8 +326,27 @@ function GenerateIntakeLinkForm({ onClose, onLinkGenerated }: { onClose: () => v
       
       onLinkGenerated()
     } catch (error: any) {
-      console.error('Error generating intake link:', error)
-      toast.error(error.message || 'Failed to generate intake link')
+      console.error('❌ IntakeMonitor: Generate intake link error:', error)
+      console.error('❌ IntakeMonitor: Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        stack: error.stack
+      })
+      
+      let errorMessage = 'Failed to generate intake link'
+      
+      if (error.code === 'functions/unauthenticated') {
+        errorMessage = 'Authentication required. Please sign in and try again.'
+      } else if (error.code === 'functions/permission-denied') {
+        errorMessage = 'Permission denied. Check your Firebase security rules.'
+      } else if (error.code === 'functions/unavailable') {
+        errorMessage = 'Firebase Functions unavailable. Check your connection and try again.'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      toast.error(errorMessage)
     } finally {
       setGenerating(false)
     }

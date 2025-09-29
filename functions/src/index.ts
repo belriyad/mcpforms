@@ -16,6 +16,12 @@ export const uploadTemplateAndParse = functions
   })
   .https.onCall(templateParser.uploadAndParse);
 
+export const processUploadedTemplate = functions
+  .runWith({
+    secrets: ["OPENAI_API_KEY"]
+  })
+  .https.onCall(templateParser.processUploadedTemplate);
+
 // Service Request Management
 export const createServiceRequest = functions.https.onCall(serviceManager.createService);
 export const updateServiceRequest = functions.https.onCall(serviceManager.updateService);

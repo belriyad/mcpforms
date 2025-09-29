@@ -1,0 +1,15 @@
+{
+  "users": [
+    {
+      "localId": "test-user-123",
+      "email": "test@example.com",
+      "emailVerified": true,
+      "passwordHash": "password123",
+      "salt": "salt123",
+      "displayName": "Test User",
+      "createdAt": "1640995200000",
+      "lastSignedInAt": "1640995200000",
+      "providerUserInfo": []
+    }
+  ]
+}

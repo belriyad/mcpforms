@@ -51,6 +51,7 @@ const app = (0, express_1.default)();
 app.use((0, cors_1.default)({ origin: true }));
 exports.intakeManager = {
     async generateIntakeLink(data) {
+        var _a;
         try {
             const { serviceId, clientEmail, expiresInDays = 30 } = data;
             if (!serviceId) {
@@ -82,7 +83,17 @@ exports.intakeManager = {
                 expiresAt,
             };
             await db.collection("intakes").doc(intakeId).set(intake);
-            const intakeUrl = `${functions.config().app.base_url}/intake/${linkToken}`;
+            // Get base URL from config with fallback
+            const config = functions.config();
+            console.log('🔗 IntakeManager: Firebase config:', { app: config.app });
+            const baseUrl = ((_a = config.app) === null || _a === void 0 ? void 0 : _a.base_url) || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+            const intakeUrl = `${baseUrl}/intake/${linkToken}`;
+            console.log('🔗 IntakeManager: Generated intake link:', {
+                intakeId,
+                linkToken,
+                baseUrl,
+                intakeUrl
+            });
             return {
                 success: true,
                 data: { intakeId, intakeUrl },

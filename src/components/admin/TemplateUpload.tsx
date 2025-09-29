@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '@/lib/firebase'
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'
+import { functions, storage, db } from '@/lib/firebase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -16,6 +18,7 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
   const [templateName, setTemplateName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [useDirectUpload, setUseDirectUpload] = useState(true)
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -105,6 +108,76 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
       }
       
       toast.error(errorMessage)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDirectUpload = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedFile || !templateName.trim()) {
+      toast.error('Please select a file and provide a template name')
+      return
+    }
+
+    setUploading(true)
+    
+    try {
+      console.log('📤 TemplateUpload: Starting direct upload...')
+      
+      // Create template record in Firestore first to get the ID
+      const templateData = {
+        name: templateName.trim(),
+        originalFileName: selectedFile.name,
+        fileType: selectedFile.name.split('.').pop()?.toLowerCase() || 'unknown',
+        extractedFields: [],
+        status: 'uploading',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      
+      const docRef = await addDoc(collection(db, 'templates'), templateData)
+      console.log('✅ TemplateUpload: Template document created with ID:', docRef.id)
+      
+      // Now upload file with the correct path using the Firestore document ID
+      const filePath = `templates/${docRef.id}/${selectedFile.name}`
+      const storageRef = ref(storage, filePath)
+      const uploadResult = await uploadBytes(storageRef, selectedFile)
+      const downloadURL = await getDownloadURL(uploadResult.ref)
+      
+      console.log('✅ TemplateUpload: File uploaded to:', filePath)
+      
+      // Update the template document with file information
+      await updateDoc(doc(db, 'templates', docRef.id), {
+        id: docRef.id,
+        fileUrl: filePath,
+        downloadURL,
+        status: 'uploaded',
+        updatedAt: new Date(),
+      })
+      
+      // Try to trigger AI processing
+      try {
+        console.log('🤖 Triggering AI processing for template:', docRef.id)
+        
+        // Create a Cloud Function call to process the uploaded template
+        const processTemplate = httpsCallable(functions, 'processUploadedTemplate')
+        await processTemplate({
+          templateId: docRef.id,
+          filePath: filePath
+        })
+        
+        toast.success('Template uploaded successfully! AI processing started.')
+      } catch (processingError: any) {
+        console.error('⚠️ AI processing failed, but upload succeeded:', processingError)
+        toast.success('Template uploaded successfully! (AI processing will be retried later)')
+      }
+      
+      onUploadComplete()
+    } catch (error: any) {
+      console.error('❌ TemplateUpload: Direct upload error:', error)
+      toast.error(`Upload failed: ${error.message}`)
     } finally {
       setUploading(false)
     }
@@ -202,28 +275,40 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
           </div>
 
           <div className="card-footer">
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={onClose}
-                disabled={uploading}
-                className="btn btn-outline"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpload}
-                disabled={!selectedFile || !templateName.trim() || uploading}
-                className="btn btn-primary"
-              >
-                {uploading ? (
-                  <>
-                    <LoadingSpinner size="sm" />
-                    <span className="ml-2">Uploading...</span>
-                  </>
-                ) : (
-                  'Upload & Parse'
-                )}
-              </button>
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                {useDirectUpload ? '✅ Direct upload (recommended)' : '⚠️ AI parsing (may fail)'}
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={onClose}
+                  disabled={uploading}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setUseDirectUpload(!useDirectUpload)}
+                  disabled={uploading}
+                  className="btn btn-secondary text-sm px-3"
+                >
+                  {useDirectUpload ? 'Try AI' : 'Direct'}
+                </button>
+                <button
+                  onClick={useDirectUpload ? handleDirectUpload : handleUpload}
+                  disabled={!selectedFile || !templateName.trim() || uploading}
+                  className="btn btn-primary"
+                >
+                  {uploading ? (
+                    <>
+                      <LoadingSpinner size="sm" />
+                      <span className="ml-2">Uploading...</span>
+                    </>
+                  ) : (
+                    useDirectUpload ? 'Upload Template' : 'Upload & Parse'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

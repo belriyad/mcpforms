@@ -11,13 +11,18 @@ const db = admin.firestore();
 
 export const serviceManager = {
   async createService(data: CreateServiceRequest): Promise<ApiResponse<{ serviceId: string }>> {
+    console.log("🚀 ServiceManager: Creating service with data:", JSON.stringify(data, null, 2));
+    
     try {
       const { name, description, templateIds } = data;
 
       if (!name || !description || !templateIds || templateIds.length === 0) {
+        console.log("❌ ServiceManager: Missing required fields");
         return { success: false, error: "Missing required fields" };
       }
 
+      console.log("📋 ServiceManager: Verifying templates:", templateIds);
+      
       // Verify all templates exist and are parsed
       const templateDocs = await Promise.all(
         templateIds.map(id => db.collection("templates").doc(id).get())
@@ -25,18 +30,26 @@ export const serviceManager = {
 
       const templates: Template[] = [];
       for (const doc of templateDocs) {
+        const templateData = doc.data();
+        console.log(`📄 ServiceManager: Template ${doc.id} exists: ${doc.exists}, data:`, templateData);
+        
         if (!doc.exists) {
+          console.log(`❌ ServiceManager: Template ${doc.id} not found`);
           return { success: false, error: `Template ${doc.id} not found` };
         }
-        const template = doc.data() as Template;
+        const template = templateData as Template;
         if (template.status !== "parsed") {
+          console.log(`❌ ServiceManager: Template ${template.name} not ready, status: ${template.status}`);
           return { success: false, error: `Template ${template.name} is not ready (status: ${template.status})` };
         }
         templates.push(template);
       }
 
+      console.log(`✅ ServiceManager: All ${templates.length} templates verified`);
+
       // Consolidate fields from all templates
-      const masterFormJson = this.consolidateFields(templates);
+      const masterFormJson = serviceManager.consolidateFields(templates);
+      console.log(`📝 ServiceManager: Consolidated ${masterFormJson.length} fields`);
 
       const serviceId = uuidv4();
       const service: Service = {
@@ -50,7 +63,9 @@ export const serviceManager = {
         updatedAt: new Date(),
       };
 
+      console.log("💾 ServiceManager: Saving service to Firestore:", serviceId);
       await db.collection("services").doc(serviceId).set(service);
+      console.log("✅ ServiceManager: Service saved successfully");
 
       return {
         success: true,
@@ -58,8 +73,9 @@ export const serviceManager = {
         message: "Service created successfully",
       };
     } catch (error) {
-      console.error("Error creating service:", error);
-      return { success: false, error: "Failed to create service" };
+      console.error("❌ ServiceManager: Error creating service:", error);
+      console.error("❌ ServiceManager: Error stack:", (error as Error).stack);
+      return { success: false, error: `Failed to create service: ${(error as Error).message}` };
     }
   },
 
@@ -96,7 +112,7 @@ export const serviceManager = {
           templates.push(template);
         }
 
-        updatedData.masterFormJson = this.consolidateFields(templates);
+        updatedData.masterFormJson = serviceManager.consolidateFields(templates);
       }
 
       await db.collection("services").doc(serviceId).update(updatedData);

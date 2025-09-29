@@ -11,6 +11,13 @@ export declare const templateParser: {
     }>>;
     onTemplateUploaded(object: functions.storage.ObjectMetadata): Promise<void>;
     extractFieldsWithAI(text: string): Promise<FormField[]>;
+    createIntelligentFallbackFields(text: string): FormField[];
     generatePlaceholder(type: string, label: string): string;
+    processUploadedTemplate(data: {
+        templateId: string;
+        filePath: string;
+    }): Promise<ApiResponse<{
+        message: string;
+    }>>;
 };
 //# sourceMappingURL=templateParser.d.ts.map

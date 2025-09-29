@@ -54,7 +54,19 @@ export const intakeManager = {
 
       await db.collection("intakes").doc(intakeId).set(intake);
 
-      const intakeUrl = `${functions.config().app.base_url}/intake/${linkToken}`;
+      // Get base URL from config with fallback
+      const config = functions.config();
+      console.log('🔗 IntakeManager: Firebase config:', { app: config.app });
+      
+      const baseUrl = config.app?.base_url || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      const intakeUrl = `${baseUrl}/intake/${linkToken}`;
+      
+      console.log('🔗 IntakeManager: Generated intake link:', {
+        intakeId,
+        linkToken,
+        baseUrl,
+        intakeUrl
+      });
 
       return {
         success: true,

@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 export declare const uploadTemplateAndParse: functions.HttpsFunction & functions.Runnable<any>;
+export declare const processUploadedTemplate: functions.HttpsFunction & functions.Runnable<any>;
 export declare const createServiceRequest: functions.HttpsFunction & functions.Runnable<any>;
 export declare const updateServiceRequest: functions.HttpsFunction & functions.Runnable<any>;
 export declare const deleteServiceRequest: functions.HttpsFunction & functions.Runnable<any>;

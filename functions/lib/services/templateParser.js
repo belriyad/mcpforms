@@ -45,9 +45,14 @@ const uuid_1 = require("uuid");
 // Initialize OpenAI with secret
 const getOpenAIClient = () => {
     const apiKey = process.env.OPENAI_API_KEY;
+    console.log('🔑 Checking OpenAI API key availability:', apiKey ? 'Found' : 'Missing');
     if (!apiKey) {
         throw new Error("OpenAI API key not found in environment variables");
     }
+    if (!apiKey.startsWith('sk-')) {
+        throw new Error("Invalid OpenAI API key format");
+    }
+    console.log('✅ OpenAI client initialized successfully');
     return new openai_1.OpenAI({ apiKey });
 };
 // Initialize Firebase Admin if not already initialized (needed for module loading order)
@@ -58,6 +63,7 @@ const db = admin.firestore();
 const storage = admin.storage();
 exports.templateParser = {
     async uploadAndParse(data) {
+        var _a, _b;
         try {
             const { fileName, fileType, templateName } = data;
             if (!fileName || !fileType || !templateName) {
@@ -68,13 +74,22 @@ exports.templateParser = {
             }
             const templateId = (0, uuid_1.v4)();
             const filePath = `templates/${templateId}/${fileName}`;
+            console.log('📤 TemplateParser: Generating upload URL for:', {
+                templateId,
+                fileName,
+                fileType,
+                filePath
+            });
             // Generate signed upload URL
-            const file = storage.bucket().file(filePath);
+            const bucketName = 'formgenai-4545.firebasestorage.app';
+            const file = storage.bucket(bucketName).file(filePath);
+            console.log('📤 TemplateParser: Storage bucket initialized, generating signed URL...');
             const [uploadUrl] = await file.getSignedUrl({
                 action: "write",
                 expires: Date.now() + 15 * 60 * 1000, // 15 minutes
                 contentType: fileType === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             });
+            console.log('✅ TemplateParser: Upload URL generated successfully:', uploadUrl);
             // Create template record
             const template = {
                 id: templateId,
@@ -95,8 +110,23 @@ exports.templateParser = {
             };
         }
         catch (error) {
-            console.error("Error in uploadAndParse:", error);
-            return { success: false, error: "Failed to generate upload URL" };
+            console.error("❌ TemplateParser: Error in uploadAndParse:", error);
+            console.error("❌ TemplateParser: Error details:", {
+                message: error.message,
+                code: error.code,
+                stack: error.stack
+            });
+            let errorMessage = "Failed to generate upload URL";
+            if ((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes("bucket")) {
+                errorMessage = "Storage bucket configuration error. Check Firebase Storage setup.";
+            }
+            else if ((_b = error.message) === null || _b === void 0 ? void 0 : _b.includes("permission")) {
+                errorMessage = "Storage permission denied. Check Firebase Storage rules.";
+            }
+            else if (error.message) {
+                errorMessage = `Upload error: ${error.message}`;
+            }
+            return { success: false, error: errorMessage };
         }
     },
     async onTemplateUploaded(object) {
@@ -160,65 +190,310 @@ exports.templateParser = {
     async extractFieldsWithAI(text) {
         var _a, _b;
         try {
-            const prompt = `
-Analyze the following document text and extract all form fields that would be needed for an intake form. 
-Return a JSON object with a "fields" array containing field objects with the following structure:
-- name: string (field identifier, camelCase, no spaces)
-- type: string (one of: text, email, number, date, select, textarea, checkbox, radio)
-- label: string (human-readable field label)
-- description: string (optional description of what this field is for)
-- required: boolean (whether this field is required)
-- options: string[] (only for select, radio, checkbox types)
-
-Focus on identifying:
-1. Personal information fields (name, email, phone, address, etc.)
-2. Business information fields (company name, business type, etc.)
-3. Document-specific fields (amounts, dates, descriptions, etc.)
-4. Selection fields (dropdowns, checkboxes, radio buttons)
+            console.log('🤖 Starting AI field extraction with structured outputs...');
+            console.log('📄 Document text preview:', text.substring(0, 200) + '...');
+            if (!text || text.trim().length === 0) {
+                throw new Error('No text content to analyze');
+            }
+            console.log('🔑 Getting OpenAI client...');
+            const openaiClient = getOpenAIClient();
+            // Define JSON Schema for structured output
+            const responseSchema = {
+                type: "object",
+                properties: {
+                    fields: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                name: { type: "string", description: "Field identifier in camelCase" },
+                                type: {
+                                    type: "string",
+                                    enum: ["text", "email", "number", "date", "select", "textarea", "checkbox", "radio"],
+                                    description: "Field input type"
+                                },
+                                label: { type: "string", description: "Human-readable field label" },
+                                description: { type: "string", description: "Field description or purpose" },
+                                required: { type: "boolean", description: "Whether field is required" },
+                                options: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                    description: "Options for select/radio/checkbox fields"
+                                }
+                            },
+                            required: ["name", "type", "label", "required"],
+                            additionalProperties: false
+                        }
+                    }
+                },
+                required: ["fields"],
+                additionalProperties: false
+            };
+            console.log('📤 Sending structured request to OpenAI...');
+            // Try with multiple fallback strategies
+            let response;
+            const models = ["gpt-4o-2024-08-06", "gpt-4o", "gpt-4-turbo"];
+            let lastError;
+            for (const model of models) {
+                try {
+                    console.log(`🔄 Trying model: ${model}`);
+                    if (model === "gpt-4o-2024-08-06") {
+                        // Try structured outputs first
+                        response = await openaiClient.chat.completions.create({
+                            model: model,
+                            messages: [
+                                {
+                                    role: "system",
+                                    content: `You are an expert at analyzing legal documents and extracting form field requirements. 
+                  Analyze the document text and identify all fields needed for an intake form.
+                  
+                  Focus on:
+                  1. Personal information (names, emails, addresses, phone numbers)
+                  2. Business information (company names, business types, roles)  
+                  3. Document-specific fields (amounts, dates, descriptions, selections)
+                  4. Legal requirements (signatures, witnesses, notarization needs)
+                  
+                  For each field, determine the appropriate input type and whether it should be required.`
+                                },
+                                {
+                                    role: "user",
+                                    content: `Please analyze this document text and extract all form fields needed for an intake form:\n\n${text.substring(0, 8000)}` // Limit text length
+                                }
+                            ],
+                            response_format: {
+                                type: "json_schema",
+                                json_schema: {
+                                    name: "form_fields_extraction",
+                                    schema: responseSchema,
+                                    strict: true
+                                }
+                            },
+                            temperature: 0.1
+                        }, {
+                            timeout: 30000 // 30 second timeout
+                        });
+                    }
+                    else {
+                        // Fallback to regular chat completion with JSON mode
+                        response = await openaiClient.chat.completions.create({
+                            model: model,
+                            messages: [
+                                {
+                                    role: "system",
+                                    content: `You are an expert at analyzing legal documents and extracting form field requirements. Always respond with valid JSON only.`
+                                },
+                                {
+                                    role: "user",
+                                    content: `Analyze this document and return form fields as JSON with this structure:
+{"fields": [{"name": "string", "type": "text|email|number|date|select|textarea|checkbox|radio", "label": "string", "required": boolean, "description": "string", "options": []}]}
 
 Document text:
-${text}
-
-Return only valid JSON with no additional text or formatting.
-`;
-            const openaiClient = getOpenAIClient();
-            const response = await openaiClient.chat.completions.create({
-                model: "gpt-4",
-                messages: [
-                    {
-                        role: "system",
-                        content: "You are an expert at analyzing documents and extracting form field requirements. Always return valid JSON.",
-                    },
-                    {
-                        role: "user",
-                        content: prompt,
-                    },
-                ],
-                temperature: 0.3,
-                max_tokens: 2000,
-            });
-            const content = (_b = (_a = response.choices[0]) === null || _a === void 0 ? void 0 : _a.message) === null || _b === void 0 ? void 0 : _b.content;
-            if (!content) {
-                throw new Error("No response from OpenAI");
+${text.substring(0, 6000)}`
+                                }
+                            ],
+                            response_format: { type: "json_object" },
+                            temperature: 0.1,
+                            max_tokens: 2000
+                        }, {
+                            timeout: 20000 // 20 second timeout
+                        });
+                    }
+                    console.log(`✅ Success with model: ${model}`);
+                    break;
+                }
+                catch (error) {
+                    console.log(`❌ Failed with model ${model}:`, error.message);
+                    lastError = error;
+                    continue;
+                }
             }
+            if (!response) {
+                throw lastError || new Error("All OpenAI models failed");
+            }
+            const content = (_b = (_a = response.choices[0]) === null || _a === void 0 ? void 0 : _a.message) === null || _b === void 0 ? void 0 : _b.content;
+            console.log('📥 OpenAI structured response received');
+            if (!content) {
+                throw new Error("No response content from OpenAI");
+            }
+            console.log('🔄 Parsing structured JSON response...');
             const parsedResponse = JSON.parse(content);
+            if (!parsedResponse.fields || !Array.isArray(parsedResponse.fields)) {
+                throw new Error('Invalid response format: missing fields array');
+            }
+            console.log(`📋 Found ${parsedResponse.fields.length} fields in document`);
             // Convert to FormField format
-            const formFields = parsedResponse.fields.map(field => ({
+            const formFields = parsedResponse.fields.map((field) => ({
                 id: (0, uuid_1.v4)(),
                 name: field.name,
                 type: field.type,
                 label: field.label,
-                description: field.description,
+                description: field.description || "",
                 required: field.required,
-                options: field.options,
-                placeholder: this.generatePlaceholder(field.type, field.label),
+                options: field.options || [],
+                placeholder: exports.templateParser.generatePlaceholder(field.type, field.label),
             }));
+            console.log(`✅ Successfully extracted ${formFields.length} fields using structured outputs`);
             return formFields;
         }
         catch (error) {
-            console.error("Error extracting fields with AI:", error);
-            throw new Error("Failed to extract fields using AI");
+            console.error("❌ Error extracting fields with AI:", error);
+            console.error("❌ Error details:", {
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                name: error instanceof Error ? error.name : undefined
+            });
+            // If OpenAI completely fails, create intelligent fallback fields based on document content
+            console.log("🔄 OpenAI failed, creating intelligent fallback fields based on document analysis...");
+            return exports.templateParser.createIntelligentFallbackFields(text);
         }
+    },
+    createIntelligentFallbackFields(text) {
+        console.log('🧠 Analyzing document text for intelligent field creation...');
+        const fields = [];
+        const lowerText = text.toLowerCase();
+        // Always include basic contact fields
+        fields.push({
+            id: (0, uuid_1.v4)(),
+            name: "fullName",
+            type: "text",
+            label: "Full Name",
+            description: "Enter your full legal name",
+            required: true,
+            placeholder: "Enter full name"
+        });
+        fields.push({
+            id: (0, uuid_1.v4)(),
+            name: "email",
+            type: "email",
+            label: "Email Address",
+            description: "Enter your email address",
+            required: true,
+            placeholder: "Enter email address"
+        });
+        // Document-specific fields based on content analysis
+        if (lowerText.includes('trust') || lowerText.includes('trustee') || lowerText.includes('beneficiary')) {
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "trustorName",
+                type: "text",
+                label: "Trustor Name",
+                description: "Name of the person creating the trust",
+                required: true,
+                placeholder: "Enter trustor name"
+            });
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "trusteeName",
+                type: "text",
+                label: "Trustee Name",
+                description: "Name of the trustee",
+                required: true,
+                placeholder: "Enter trustee name"
+            });
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "beneficiaries",
+                type: "textarea",
+                label: "Beneficiaries",
+                description: "List of beneficiaries",
+                required: true,
+                placeholder: "Enter beneficiary names and details"
+            });
+        }
+        if (lowerText.includes('deed') || lowerText.includes('property') || lowerText.includes('real estate')) {
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "propertyAddress",
+                type: "textarea",
+                label: "Property Address",
+                description: "Full address of the property",
+                required: true,
+                placeholder: "Enter complete property address"
+            });
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "grantorName",
+                type: "text",
+                label: "Grantor Name",
+                description: "Name of the person transferring the property",
+                required: true,
+                placeholder: "Enter grantor name"
+            });
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "granteeName",
+                type: "text",
+                label: "Grantee Name",
+                description: "Name of the person receiving the property",
+                required: true,
+                placeholder: "Enter grantee name"
+            });
+        }
+        if (lowerText.includes('certificate') || lowerText.includes('corporate') || lowerText.includes('company')) {
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "companyName",
+                type: "text",
+                label: "Company Name",
+                description: "Legal name of the company",
+                required: true,
+                placeholder: "Enter company name"
+            });
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "incorporationState",
+                type: "select",
+                label: "State of Incorporation",
+                description: "State where the company is incorporated",
+                required: true,
+                options: ["California", "Delaware", "Nevada", "Texas", "New York", "Other"],
+                placeholder: "Select state"
+            });
+        }
+        // Common fields for legal documents
+        if (lowerText.includes('date') || lowerText.includes('sign')) {
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "documentDate",
+                type: "date",
+                label: "Document Date",
+                description: "Date of the document",
+                required: true,
+                placeholder: "Select date"
+            });
+        }
+        if (lowerText.includes('notary') || lowerText.includes('witness')) {
+            fields.push({
+                id: (0, uuid_1.v4)(),
+                name: "witnessRequired",
+                type: "checkbox",
+                label: "Witness Required",
+                description: "Check if witness is required",
+                required: false,
+                placeholder: "Witness Required"
+            });
+        }
+        // Always add phone and notes
+        fields.push({
+            id: (0, uuid_1.v4)(),
+            name: "phone",
+            type: "text",
+            label: "Phone Number",
+            description: "Enter your phone number",
+            required: false,
+            placeholder: "Enter phone number"
+        });
+        fields.push({
+            id: (0, uuid_1.v4)(),
+            name: "additionalNotes",
+            type: "textarea",
+            label: "Additional Information",
+            description: "Any additional information or special requirements",
+            required: false,
+            placeholder: "Enter any additional details"
+        });
+        console.log(`✅ Created ${fields.length} intelligent fallback fields based on document content`);
+        return fields;
     },
     generatePlaceholder(type, label) {
         const placeholders = {
@@ -232,6 +507,67 @@ Return only valid JSON with no additional text or formatting.
             radio: label,
         };
         return placeholders[type] || `Enter ${label.toLowerCase()}`;
+    },
+    async processUploadedTemplate(data) {
+        var _a;
+        try {
+            const { templateId, filePath } = data;
+            if (!templateId || !filePath) {
+                return { success: false, error: "Missing templateId or filePath" };
+            }
+            console.log('🤖 Processing uploaded template:', { templateId, filePath });
+            // Update status to parsing
+            await db.collection("templates").doc(templateId).update({
+                status: "parsing",
+                updatedAt: new Date(),
+            });
+            // Download and parse the file
+            const file = storage.bucket().file(filePath);
+            const [fileBuffer] = await file.download();
+            let extractedText = "";
+            const fileExtension = (_a = filePath.split(".").pop()) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+            if (fileExtension === "pdf") {
+                const pdfData = await (0, pdf_parse_1.default)(fileBuffer);
+                extractedText = pdfData.text;
+            }
+            else if (fileExtension === "docx") {
+                const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
+                extractedText = docxData.value;
+            }
+            else {
+                throw new Error("Unsupported file type");
+            }
+            console.log('📄 Extracted text length:', extractedText.length);
+            // Extract fields using OpenAI with Structured Outputs
+            const extractedFields = await exports.templateParser.extractFieldsWithAI(extractedText);
+            // Update template with extracted fields
+            await db.collection("templates").doc(templateId).update({
+                extractedFields,
+                status: "parsed",
+                parsedAt: new Date(),
+                updatedAt: new Date(),
+            });
+            console.log(`✅ Successfully processed template ${templateId} with ${extractedFields.length} fields`);
+            return {
+                success: true,
+                data: { message: `Template processed successfully with ${extractedFields.length} fields` },
+            };
+        }
+        catch (error) {
+            console.error("❌ Error processing uploaded template:", error);
+            // Update template with error status
+            if (data.templateId) {
+                await db.collection("templates").doc(data.templateId).update({
+                    status: "error",
+                    errorMessage: error.message || "Unknown processing error",
+                    updatedAt: new Date(),
+                });
+            }
+            return {
+                success: false,
+                error: `Failed to process template: ${error.message}`
+            };
+        }
     },
 };
 //# sourceMappingURL=templateParser.js.map

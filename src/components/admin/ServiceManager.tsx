@@ -261,19 +261,32 @@ function CreateServiceForm({ templates, onClose, onServiceCreated }: CreateServi
     }
 
     setCreating(true)
+    console.log('🚀 ServiceManager: Starting service creation...', {
+      name: name.trim(),
+      description: description.trim(),
+      templateIds: selectedTemplates,
+    })
 
     try {
       const createServiceRequest = httpsCallable(functions, 'createServiceRequest')
-      await createServiceRequest({
+      const result = await createServiceRequest({
         name: name.trim(),
         description: description.trim(),
         templateIds: selectedTemplates,
       })
 
-      toast.success('Service created successfully!')
-      onServiceCreated()
+      console.log('✅ ServiceManager: Service creation result:', result)
+      
+      if (result.data && (result.data as any).success) {
+        console.log('✅ ServiceManager: Service created successfully!')
+        toast.success('Service created successfully!')
+        onServiceCreated()
+      } else {
+        console.error('❌ ServiceManager: Service creation failed:', result.data)
+        throw new Error((result.data as any)?.error || 'Service creation failed')
+      }
     } catch (error: any) {
-      console.error('Error creating service:', error)
+      console.error('❌ ServiceManager: Error creating service:', error)
       toast.error(error.message || 'Failed to create service')
     } finally {
       setCreating(false)

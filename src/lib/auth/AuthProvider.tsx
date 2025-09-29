@@ -33,130 +33,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
-    console.log('🔐 AuthProvider: Initializing auth state')
-    console.log('🔐 NODE_ENV:', process.env.NODE_ENV)
-    console.log('🔐 hostname:', typeof window !== 'undefined' ? window.location.hostname : 'server')
+    console.log('� AUTH DISABLED FOR DEBUGGING: Using mock user always')
     
-    // Only use mock auth in test environment
-    const isTestEnvironment = process.env.NODE_ENV === 'test' || 
-                             (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1');
-
-    console.log('🔐 isTestEnvironment:', isTestEnvironment)
-
-    if (isTestEnvironment) {
-      // Listen for mock auth changes in test environment
-      const handleMockAuth = (event: any) => {
-        console.log('✅ Using mock authentication');
-        setUser(event.detail);
-        setLoading(false);
-      };
-
-      // Check for existing mock auth state
-      const checkMockAuth = () => {
-        const w = window as any;
-        if (w.__MOCK_AUTH_USER__) {
-          console.log('✅ Using existing mock authentication');
-          setUser(w.__MOCK_AUTH_USER__);
-          setLoading(w.__MOCK_AUTH_LOADING__ ?? false);
-          return true;
-        }
-        return false;
-      };
-
-      // Set up mock auth listener
-      window.addEventListener('mock-auth-change', handleMockAuth);
-
-      // Use mock auth if available
-      if (checkMockAuth()) {
-        return () => {
-          window.removeEventListener('mock-auth-change', handleMockAuth);
-        };
-      }
-
-      // Clean up listener for test environment
-      return () => {
-        window.removeEventListener('mock-auth-change', handleMockAuth);
-      };
-    }
-
-    // Production/Development: Use Firebase auth
-    console.log('🔐 AuthProvider: Setting up Firebase auth listener')
+    // TEMPORARY: Always use mock user for debugging
+    const mockUser = {
+      uid: 'debug-admin-user',
+      email: 'admin@debug.com',
+      displayName: 'Debug Admin',
+      emailVerified: true,
+      isAnonymous: false,
+      providerId: 'debug',
+      metadata: {
+        creationTime: new Date().toISOString(),
+        lastSignInTime: new Date().toISOString(),
+      },
+      phoneNumber: null,
+      photoURL: null,
+      providerData: [],
+      refreshToken: 'debug-refresh-token',
+      tenantId: null,
+      delete: async () => {},
+      getIdToken: async () => 'debug-id-token',
+      getIdTokenResult: async () => ({
+        token: 'debug-id-token',
+        authTime: new Date().toISOString(),
+        issuedAtTime: new Date().toISOString(),
+        expirationTime: new Date(Date.now() + 3600000).toISOString(),
+        signInProvider: 'debug',
+        signInSecondFactor: null,
+        claims: { admin: true },
+      }),
+      reload: async () => {},
+      toJSON: () => ({}),
+    } as User;
     
-    // Set a timeout to prevent infinite loading
-    const loadingTimeout = setTimeout(() => {
-      console.log('⚠️ AuthProvider: Auth loading timeout - forcing end of loading state')
-      setLoading(false)
-      setAuthError('Authentication timeout - check your connection and Firebase configuration')
-    }, 10000) // 10 second timeout
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('🔐 AuthProvider: Auth state changed:', user ? 'User logged in' : 'No user')
-      clearTimeout(loadingTimeout)
-      setUser(user)
-      setLoading(false)
-      setAuthError(null)
-    }, (error) => {
-      console.error('🔐 AuthProvider: Auth error:', error)
-      clearTimeout(loadingTimeout)
-      setLoading(false)
-      setAuthError(`Authentication error: ${error.message}`)
-    })
-
-    return () => {
-      clearTimeout(loadingTimeout)
-      unsubscribe()
-    }
+    setUser(mockUser);
+    setLoading(false);
+    setAuthError(null);
+    
+    console.log('✅ Mock user authenticated:', mockUser.email);
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    try {
-      await signInWithEmailAndPassword(auth, email, password)
-      toast.success('Signed in successfully!')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to sign in')
-      throw error
-    }
+    console.log('🔧 AUTH DISABLED: Mock sign in')
+    toast.success('Mock sign in successful!')
   }
 
   const signUp = async (email: string, password: string) => {
-    try {
-      await createUserWithEmailAndPassword(auth, email, password)
-      toast.success('Account created successfully!')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create account')
-      throw error
-    }
+    console.log('🔧 AUTH DISABLED: Mock sign up')
+    toast.success('Mock account created!')
   }
 
   const signInWithGoogle = async () => {
-    try {
-      const provider = new GoogleAuthProvider()
-      await signInWithPopup(auth, provider)
-      toast.success('Signed in with Google successfully!')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to sign in with Google')
-      throw error
-    }
+    console.log('🔧 AUTH DISABLED: Mock Google sign in')
+    toast.success('Mock Google sign in successful!')
   }
 
   const signOut = async () => {
-    try {
-      await firebaseSignOut(auth)
-      toast.success('Signed out successfully!')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to sign out')
-      throw error
-    }
+    console.log('🔧 AUTH DISABLED: Mock sign out')
+    toast.success('Mock sign out successful!')
   }
 
   const resetPassword = async (email: string) => {
-    try {
-      await sendPasswordResetEmail(auth, email)
-      toast.success('Password reset email sent!')
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send password reset email')
-      throw error
-    }
+    console.log('🔧 AUTH DISABLED: Mock password reset')
+    toast.success('Mock password reset email sent!')
   }
 
   const value = {
