@@ -1,0 +1,916 @@
+# MCPForms OpenAPI Specification
+
+openapi: 3.1.0
+info:
+  title: MCPForms Backend API
+  description: |
+    Comprehensive backend API for MCPForms - AI-powered document template parsing, 
+    service management, intake form generation, and document automation system.
+    
+    ## Authentication
+    - **Cloud Functions**: Require Firebase Authentication JWT token
+    - **HTTP Endpoints**: Use token-based authentication with `linkToken`
+    
+    ## Base URLs
+    - Production: `https://us-central1-formgenai-4545.cloudfunctions.net`
+    - Development: `https://us-central1-mcpforms-dev.cloudfunctions.net`
+    
+  version: 1.0.0
+  contact:
+    name: MCPForms API Support
+    email: support@mcpforms.com
+  license:
+    name: MIT
+    
+servers:
+  - url: https://us-central1-formgenai-4545.cloudfunctions.net
+    description: Production server
+  - url: https://us-central1-mcpforms-dev.cloudfunctions.net  
+    description: Development server
+  - url: http://localhost:5001/{project-id}/us-central1
+    description: Local development
+
+paths:
+  # Template Management Endpoints
+  /uploadTemplateAndParse:
+    post:
+      tags:
+        - Template Management
+      summary: Upload and parse document template
+      description: |
+        Upload a document template (PDF or DOCX) and initiate AI-powered field extraction.
+        Returns a signed upload URL for file upload and template ID for tracking.
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadTemplateRequest'
+            example:
+              fileName: "contract-template.docx"
+              fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              templateName: "Standard Contract Template"
+      responses:
+        200:
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          templateId:
+                            type: string
+                            example: "template_123"
+                          uploadUrl:
+                            type: string
+                            format: uri
+                            example: "https://storage.googleapis.com/..."
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/ServerError'
+
+  /processUploadedTemplate:
+    post:
+      tags:
+        - Template Management
+      summary: Process uploaded template file
+      description: Process an uploaded template file with AI field extraction
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - templateId
+                - filePath
+              properties:
+                templateId:
+                  type: string
+                  example: "template_123"
+                filePath:
+                  type: string
+                  example: "templates/template_123.docx"
+      responses:
+        200:
+          description: Template processed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: "Template processed successfully"
+
+  # Service Management Endpoints  
+  /createServiceRequest:
+    post:
+      tags:
+        - Service Management
+      summary: Create new service
+      description: Create a new service by combining multiple parsed templates
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServiceRequest'
+            example:
+              name: "Legal Document Package"
+              description: "Complete legal documentation service including contracts, agreements, and forms"
+              templateIds: ["template_123", "template_456", "template_789"]
+      responses:
+        200:
+          description: Service created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          serviceId:
+                            type: string
+                            example: "service_abc123"
+
+  /updateServiceRequest:
+    post:
+      tags:
+        - Service Management
+      summary: Update existing service
+      description: Update service details and configuration
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - serviceId
+                - updates
+              properties:
+                serviceId:
+                  type: string
+                  example: "service_abc123"
+                updates:
+                  $ref: '#/components/schemas/ServiceUpdate'
+      responses:
+        200:
+          description: Service updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /deleteServiceRequest:
+    post:
+      tags:
+        - Service Management
+      summary: Delete service
+      description: Delete a service and all associated intake links
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - serviceId
+              properties:
+                serviceId:
+                  type: string
+                  example: "service_abc123"
+      responses:
+        200:
+          description: Service deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  # Intake Management Endpoints
+  /generateIntakeLink:
+    post:
+      tags:
+        - Intake Management
+      summary: Generate intake form link
+      description: |
+        Generate a unique, secure intake form link for a specific service.
+        The link can be sent to clients to fill out the intake form.
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateIntakeLinkRequest'
+            example:
+              serviceId: "service_abc123"
+              clientEmail: "client@example.com"
+              expiresInDays: 30
+      responses:
+        200:
+          description: Intake link generated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          intakeId:
+                            type: string
+                            example: "intake_xyz789"
+                          intakeUrl:
+                            type: string
+                            format: uri
+                            example: "https://your-domain.com/intake/unique-token-123"
+
+  /submitIntakeForm:
+    post:
+      tags:
+        - Intake Management
+      summary: Submit intake form data
+      description: Submit completed intake form data for processing
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitIntakeRequest'
+      responses:
+        200:
+          description: Intake form submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /approveIntakeForm:
+    post:
+      tags:
+        - Intake Management
+      summary: Approve or reject intake form
+      description: Admin endpoint to approve or reject submitted intake forms
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - intakeId
+                - approved
+              properties:
+                intakeId:
+                  type: string
+                  example: "intake_xyz789"
+                approved:
+                  type: boolean
+                  example: true
+                notes:
+                  type: string
+                  example: "Approved for processing"
+      responses:
+        200:
+          description: Intake form status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  # Document Generation Endpoints
+  /generateDocumentsFromIntake:
+    post:
+      tags:
+        - Document Generation
+      summary: Generate documents from intake
+      description: |
+        Generate filled documents from approved intake data.
+        Creates personalized documents by filling templates with client data.
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - intakeId
+              properties:
+                intakeId:
+                  type: string
+                  example: "intake_xyz789"
+      responses:
+        200:
+          description: Documents generated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          artifactIds:
+                            type: array
+                            items:
+                              type: string
+                            example: ["doc_001", "doc_002", "doc_003"]
+
+  /getDocumentDownloadUrl:
+    post:
+      tags:
+        - Document Generation
+      summary: Get document download URL
+      description: |
+        Get a secure, temporary download URL for generated documents.
+        URLs expire after 1 hour for security.
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - artifactId
+              properties:
+                artifactId:
+                  type: string
+                  example: "doc_001"
+      responses:
+        200:
+          description: Download URL generated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          downloadUrl:
+                            type: string
+                            format: uri
+                            example: "https://storage.googleapis.com/..."
+
+  # Public HTTP Endpoints (No auth required)
+  /intakeFormAPI/intake/{token}:
+    get:
+      tags:
+        - Public Intake API
+      summary: Get intake form data
+      description: |
+        Get intake form structure and metadata using the unique token.
+        This endpoint is publicly accessible and doesn't require authentication.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: Unique intake form token
+          schema:
+            type: string
+            example: "unique-token-123"
+      responses:
+        200:
+          description: Intake form data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          intake:
+                            $ref: '#/components/schemas/Intake'
+                          service:
+                            $ref: '#/components/schemas/Service'
+                          formFields:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/FormField'
+        404:
+          description: Intake form not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /intakeFormAPI/intake/{token}/save:
+    post:
+      tags:
+        - Public Intake API
+      summary: Save intake form progress
+      description: Save partial intake form data (auto-save functionality)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                formData:
+                  type: object
+                  additionalProperties: true
+                  example:
+                    firstName: "John"
+                    lastName: "Doe"
+                    email: "john@example.com"
+      responses:
+        200:
+          description: Progress saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /intakeFormAPI/intake/{token}/submit:
+    post:
+      tags:
+        - Public Intake API
+      summary: Submit completed intake form
+      description: Submit complete intake form data for processing
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - formData
+              properties:
+                formData:
+                  type: object
+                  additionalProperties: true
+                  example:
+                    firstName: "John"
+                    lastName: "Doe"
+                    email: "john@example.com"
+                    company: "Acme Corp"
+                clientInfo:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: "John Doe"
+                    email:
+                      type: string
+                      format: email
+                      example: "john@example.com"
+      responses:
+        200:
+          description: Form submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+components:
+  securitySchemes:
+    firebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase Authentication JWT token
+
+  schemas:
+    ApiResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          description: Response payload (present on success)
+        error:
+          type: string
+          description: Error message (present on failure)
+          example: "Invalid request parameters"
+        message:
+          type: string
+          description: Additional information
+          example: "Operation completed successfully"
+
+    UploadTemplateRequest:
+      type: object
+      required:
+        - fileName
+        - fileType
+        - templateName
+      properties:
+        fileName:
+          type: string
+          description: Name of the file to upload
+          example: "contract-template.docx"
+        fileType:
+          type: string
+          description: MIME type of the file
+          enum:
+            - "application/pdf"
+            - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          example: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        templateName:
+          type: string
+          description: Display name for the template
+          example: "Standard Contract Template"
+
+    CreateServiceRequest:
+      type: object
+      required:
+        - name
+        - description
+        - templateIds
+      properties:
+        name:
+          type: string
+          description: Service display name
+          example: "Legal Document Package"
+        description:
+          type: string
+          description: Service description
+          example: "Complete legal documentation service"
+        templateIds:
+          type: array
+          items:
+            type: string
+          description: Array of template IDs to include
+          example: ["template_123", "template_456"]
+          minItems: 1
+
+    ServiceUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: ["draft", "active", "inactive"]
+        templateIds:
+          type: array
+          items:
+            type: string
+
+    GenerateIntakeLinkRequest:
+      type: object
+      required:
+        - serviceId
+      properties:
+        serviceId:
+          type: string
+          description: ID of the service to create intake for
+          example: "service_abc123"
+        clientEmail:
+          type: string
+          format: email
+          description: Optional client email for pre-population
+          example: "client@example.com"
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 30
+          description: Number of days until link expires
+          example: 30
+
+    SubmitIntakeRequest:
+      type: object
+      required:
+        - intakeId
+        - formData
+      properties:
+        intakeId:
+          type: string
+          example: "intake_xyz789"
+        formData:
+          type: object
+          additionalProperties: true
+          description: Form field values
+        clientInfo:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "template_123"
+        name:
+          type: string
+          example: "Contract Template"
+        originalFileName:
+          type: string
+          example: "contract.docx"
+        fileUrl:
+          type: string
+          example: "templates/template_123.docx"
+        fileType:
+          type: string
+          enum: ["pdf", "docx"]
+        extractedFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormField'
+        status:
+          type: string
+          enum: ["uploaded", "parsing", "parsed", "error"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        parsedAt:
+          type: string
+          format: date-time
+        errorMessage:
+          type: string
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "service_abc123"
+        name:
+          type: string
+          example: "Legal Package"
+        description:
+          type: string
+          example: "Complete legal service"
+        templateIds:
+          type: array
+          items:
+            type: string
+        masterFormJson:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormField'
+        status:
+          type: string
+          enum: ["draft", "active", "inactive"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Intake:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "intake_xyz789"
+        serviceId:
+          type: string
+          example: "service_abc123"
+        serviceName:
+          type: string
+          example: "Legal Package"
+        linkToken:
+          type: string
+          example: "unique-token-123"
+        clientData:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: ["link-generated", "opened", "in-progress", "submitted", "approved", "rejected", "documents-generated"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+        clientEmail:
+          type: string
+          format: email
+        clientName:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    FormField:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "field_001"
+        name:
+          type: string
+          example: "firstName"
+        type:
+          type: string
+          enum: ["text", "email", "number", "date", "select", "textarea", "checkbox", "radio"]
+        label:
+          type: string
+          example: "First Name"
+        description:
+          type: string
+          example: "Enter your legal first name"
+        required:
+          type: boolean
+          example: true
+        options:
+          type: array
+          items:
+            type: string
+          description: Options for select, radio, checkbox types
+        validation:
+          $ref: '#/components/schemas/FieldValidation'
+        placeholder:
+          type: string
+          example: "Enter first name"
+
+    FieldValidation:
+      type: object
+      properties:
+        minLength:
+          type: integer
+          minimum: 0
+        maxLength:
+          type: integer
+          minimum: 1
+        pattern:
+          type: string
+          description: Regular expression pattern
+        min:
+          type: number
+          description: Minimum value for number fields
+        max:
+          type: number
+          description: Maximum value for number fields
+
+    DocumentArtifact:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "doc_001"
+        intakeId:
+          type: string
+          example: "intake_xyz789"
+        templateId:
+          type: string
+          example: "template_123"
+        fileName:
+          type: string
+          example: "Contract_filled.docx"
+        fileUrl:
+          type: string
+          example: "generated-documents/intake_xyz789/doc_001.docx"
+        fileType:
+          type: string
+          example: "docx"
+        generatedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: ["generating", "generated", "error"]
+        errorMessage:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid parameters
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    example: false
+                  error:
+                    example: "Invalid request parameters"
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing authentication
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    example: false
+                  error:
+                    example: "Authentication required"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    example: false
+                  error:
+                    example: "Resource not found"
+
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    example: false
+                  error:
+                    example: "Internal server error"
+
+tags:
+  - name: Template Management
+    description: Upload, parse, and manage document templates
+  - name: Service Management
+    description: Create and manage services combining multiple templates
+  - name: Intake Management
+    description: Generate intake links and manage form submissions
+  - name: Document Generation
+    description: Generate and download filled documents
+  - name: Public Intake API
+    description: Public endpoints for client intake form access

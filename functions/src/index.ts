@@ -34,6 +34,7 @@ export const approveIntakeForm = functions.https.onCall(intakeManager.approveInt
 
 // Document Generation
 export const generateDocumentsFromIntake = functions.https.onCall(documentGenerator.generateDocuments);
+export const getDocumentDownloadUrl = functions.https.onCall(documentGenerator.getDownloadUrl);
 
 // HTTP endpoints for public intake forms
 const app = express();

@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "export": "next build && next export",
-    "deploy": "npm run build && firebase deploy --only hosting",
-    "deploy:all": "npm run build && firebase deploy",
+    "export": "next build; next export",
+    "deploy": "npm run build; firebase deploy --only hosting",
+    "deploy:all": "npm run build; firebase deploy",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
@@ -19,7 +19,13 @@
     "test:firebase": "playwright test tests/mcp-firebase-integration.spec.ts",
     "test:components": "playwright test tests/mcp-ui-components.spec.ts",
     "test:debug": "playwright test --debug",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "test:workflow": "playwright test tests/complete-workflow-with-docs.spec.ts tests/form-filling-automation.spec.ts",
+    "test:workflow:headed": "playwright test tests/complete-workflow-with-docs.spec.ts tests/form-filling-automation.spec.ts --headed",
+    "automation:full": "node run-complete-workflow.js",
+    "automation:powershell": "powershell -ExecutionPolicy Bypass -File run-complete-workflow.ps1",
+    "automation:headed": "powershell -ExecutionPolicy Bypass -File run-complete-workflow.ps1 -Headed",
+    "automation:debug": "powershell -ExecutionPolicy Bypass -File run-complete-workflow.ps1 -Debug -Headed"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",

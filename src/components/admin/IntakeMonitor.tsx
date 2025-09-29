@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
+import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -22,16 +22,30 @@ interface Intake {
   expiresAt?: any
 }
 
+interface DocumentArtifact {
+  id: string
+  intakeId: string
+  templateId: string
+  fileName: string
+  fileUrl: string
+  fileType: string
+  generatedAt: any
+  status: 'generating' | 'generated' | 'error'
+  errorMessage?: string
+}
+
 export default function IntakeMonitor() {
   const [intakes, setIntakes] = useState<Intake[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedIntake, setSelectedIntake] = useState<Intake | null>(null)
   const [showGenerateLink, setShowGenerateLink] = useState(false)
+  const [documentArtifacts, setDocumentArtifacts] = useState<Record<string, DocumentArtifact[]>>({})
+  const [expandedDocuments, setExpandedDocuments] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    const q = query(collection(db, 'intakes'), orderBy('createdAt', 'desc'))
+    const intakesQuery = query(collection(db, 'intakes'), orderBy('createdAt', 'desc'))
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeIntakes = onSnapshot(intakesQuery, (snapshot) => {
       const intakesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -41,7 +55,31 @@ export default function IntakeMonitor() {
       setLoading(false)
     })
 
-    return unsubscribe
+    // Listen for document artifacts
+    const artifactsQuery = query(collection(db, 'documentArtifacts'), orderBy('generatedAt', 'desc'))
+    
+    const unsubscribeArtifacts = onSnapshot(artifactsQuery, (snapshot) => {
+      const artifacts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as DocumentArtifact[]
+      
+      // Group artifacts by intake ID
+      const artifactsByIntake: Record<string, DocumentArtifact[]> = {}
+      artifacts.forEach(artifact => {
+        if (!artifactsByIntake[artifact.intakeId]) {
+          artifactsByIntake[artifact.intakeId] = []
+        }
+        artifactsByIntake[artifact.intakeId].push(artifact)
+      })
+      
+      setDocumentArtifacts(artifactsByIntake)
+    })
+
+    return () => {
+      unsubscribeIntakes()
+      unsubscribeArtifacts()
+    }
   }, [])
 
   const handleApproveIntake = async (intakeId: string, approved: boolean) => {
@@ -105,6 +143,60 @@ export default function IntakeMonitor() {
     return intake.expiresAt && intake.expiresAt.toDate() < new Date()
   }
 
+  const handleDownloadDocument = async (artifactId: string, fileName: string) => {
+    try {
+      const getDownloadUrl = httpsCallable(functions, 'getDocumentDownloadUrl')
+      const result = await getDownloadUrl({ artifactId })
+      
+      if ((result.data as any)?.success) {
+        const downloadUrl = (result.data as any).data.downloadUrl
+        
+        // Create a temporary link to download the file
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        toast.success('Document download started')
+      } else {
+        throw new Error((result.data as any)?.error || 'Failed to get download URL')
+      }
+    } catch (error: any) {
+      console.error('Error downloading document:', error)
+      toast.error(error.message || 'Failed to download document')
+    }
+  }
+
+  const toggleDocumentsView = (intakeId: string) => {
+    setExpandedDocuments(prev => ({
+      ...prev,
+      [intakeId]: !prev[intakeId]
+    }))
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'generating':
+        return <LoadingSpinner size="sm" />
+      case 'generated':
+        return (
+          <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        )
+      case 'error':
+        return (
+          <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        )
+      default:
+        return null
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -119,6 +211,21 @@ export default function IntakeMonitor() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Intake Monitor</h2>
           <p className="text-gray-600 mt-1">Monitor and manage client intake submissions</p>
+          
+          {/* Quick Stats */}
+          {intakes.length > 0 && (
+            <div className="flex items-center space-x-6 mt-3 text-sm text-gray-600">
+              <span>
+                <span className="font-medium text-blue-600">{intakes.filter(i => i.status === 'submitted').length}</span> pending approval
+              </span>
+              <span>
+                <span className="font-medium text-green-600">{intakes.filter(i => i.status === 'documents-generated').length}</span> completed
+              </span>
+              <span>
+                <span className="font-medium text-purple-600">{Object.keys(documentArtifacts).reduce((total, intakeId) => total + documentArtifacts[intakeId].length, 0)}</span> documents generated
+              </span>
+            </div>
+          )}
         </div>
         <button
           onClick={() => setShowGenerateLink(true)}
@@ -204,6 +311,82 @@ export default function IntakeMonitor() {
                             </pre>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Generated Documents Section */}
+                    {documentArtifacts[intake.id] && documentArtifacts[intake.id].length > 0 && (
+                      <div className="mb-3">
+                        <button
+                          onClick={() => toggleDocumentsView(intake.id)}
+                          className="flex items-center space-x-2 text-sm text-primary-600 hover:text-primary-500 font-medium"
+                        >
+                          <span>
+                            {expandedDocuments[intake.id] ? 'Hide' : 'View'} Generated Documents 
+                            ({documentArtifacts[intake.id].length})
+                          </span>
+                          <svg 
+                            className={`w-4 h-4 transition-transform ${expandedDocuments[intake.id] ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        
+                        {expandedDocuments[intake.id] && (
+                          <div className="mt-2 space-y-2">
+                            {documentArtifacts[intake.id].map((artifact) => (
+                              <div key={artifact.id} className="p-3 bg-gray-50 rounded border flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    {getStatusIcon(artifact.status)}
+                                    <span className="text-sm font-medium text-gray-900">
+                                      {artifact.fileName}
+                                    </span>
+                                    <span className={`text-xs px-2 py-1 rounded-full ${
+                                      artifact.status === 'generated' ? 'bg-green-100 text-green-800' :
+                                      artifact.status === 'generating' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-red-100 text-red-800'
+                                    }`}>
+                                      {artifact.status}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    <span>Generated: {artifact.generatedAt?.toDate().toLocaleString()}</span>
+                                    <span className="mx-2">•</span>
+                                    <span>Type: {artifact.fileType.toUpperCase()}</span>
+                                  </div>
+                                  {artifact.errorMessage && (
+                                    <div className="text-xs text-red-600 mt-1">
+                                      Error: {artifact.errorMessage}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {artifact.status === 'generated' && (
+                                  <button
+                                    onClick={() => handleDownloadDocument(artifact.id, artifact.fileName)}
+                                    className="btn btn-sm btn-outline text-primary-600 border-primary-300 hover:bg-primary-50"
+                                    title="Download document"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* No Documents Message for completed intakes */}
+                    {intake.status === 'documents-generated' && (!documentArtifacts[intake.id] || documentArtifacts[intake.id].length === 0) && (
+                      <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                        ⚠️ Documents were generated but not found in database. Check Firebase Storage.
                       </div>
                     )}
                   </div>
