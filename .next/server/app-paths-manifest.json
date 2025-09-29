@@ -1,5 +1,4 @@
 {
-  "/intake/[token]/page": "app/intake/[token]/page.js",
-  "/page": "app/page.js",
-  "/admin/page": "app/admin/page.js"
+  "/admin/page": "app/admin/page.js",
+  "/intake/[token]/page": "app/intake/[token]/page.js"
 }
