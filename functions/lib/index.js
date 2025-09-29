@@ -68,7 +68,7 @@ exports.generateDocumentsFromIntake = functions.https.onCall(documentGenerator_1
 // HTTP endpoints for public intake forms
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({ origin: true }));
-app.use("/api", intakeManager_1.intakeManager.intakeFormAPI);
+app.use("/", intakeManager_1.intakeManager.intakeFormAPI);
 exports.intakeFormAPI = functions.https.onRequest(app);
 // Storage triggers
 exports.onTemplateUploaded = functions

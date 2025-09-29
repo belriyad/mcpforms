@@ -1,0 +1,15 @@
+{
+  "clientName": "John Michael Smith",
+  "clientEmail": "john.smith@email.com",
+  "clientPhone": "+1 (555) 123-4567",
+  "clientAddress": "123 Main Street, Suite 400, New York, NY 10001",
+  "caseTitle": "Smith v. ABC Corporation",
+  "caseType": "Contract Dispute",
+  "caseDescription": "Contract dispute involving breach of service agreement. Client claims ABC Corporation failed to deliver services as specified in the contract signed on January 15, 2024. Seeking damages for lost revenue and additional costs incurred due to breach.",
+  "estimatedDamages": "$50,000",
+  "retainerAmount": "$10,000",
+  "opposingParty": "ABC Corporation Inc.",
+  "previousLegalAction": "No previous legal action taken. Initial demand letter sent on March 1, 2024, with 30-day response deadline. No response received.",
+  "desiredOutcome": "Financial compensation and contract termination",
+  "additionalNotes": "Client has all relevant documentation including signed contract, email correspondence, and invoices. Available for immediate consultation and case preparation."
+}

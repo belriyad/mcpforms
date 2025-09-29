@@ -38,7 +38,7 @@ export const generateDocumentsFromIntake = functions.https.onCall(documentGenera
 // HTTP endpoints for public intake forms
 const app = express();
 app.use(cors({ origin: true }));
-app.use("/api", intakeManager.intakeFormAPI);
+app.use("/", intakeManager.intakeFormAPI);
 export const intakeFormAPI = functions.https.onRequest(app);
 
 // Storage triggers
