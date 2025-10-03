@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.intakeFormAPI = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
+exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.intakeFormAPI = exports.downloadDocument = exports.getDocumentDownloadUrl = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
 const functions = __importStar(require("firebase-functions"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
@@ -47,12 +47,16 @@ const documentGenerator_1 = require("./services/documentGenerator");
 // Template Upload and AI Parsing
 exports.uploadTemplateAndParse = functions
     .runWith({
-    secrets: ["OPENAI_API_KEY"]
+    secrets: ["OPENAI_API_KEY"],
+    memory: "512MB",
+    timeoutSeconds: 120
 })
     .https.onCall(templateParser_1.templateParser.uploadAndParse);
 exports.processUploadedTemplate = functions
     .runWith({
-    secrets: ["OPENAI_API_KEY"]
+    secrets: ["OPENAI_API_KEY"],
+    memory: "1GB",
+    timeoutSeconds: 300
 })
     .https.onCall(templateParser_1.templateParser.processUploadedTemplate);
 // Service Request Management
@@ -65,6 +69,33 @@ exports.submitIntakeForm = functions.https.onCall(intakeManager_1.intakeManager.
 exports.approveIntakeForm = functions.https.onCall(intakeManager_1.intakeManager.approveIntakeForm);
 // Document Generation
 exports.generateDocumentsFromIntake = functions.https.onCall(documentGenerator_1.documentGenerator.generateDocuments);
+exports.getDocumentDownloadUrl = functions.https.onCall(documentGenerator_1.documentGenerator.getDownloadUrl);
+// HTTP endpoint for downloading documents
+exports.downloadDocument = functions.https.onRequest(async (req, res) => {
+    try {
+        const artifactId = req.path.split('/').pop();
+        if (!artifactId) {
+            res.status(400).send('Artifact ID is required');
+            return;
+        }
+        const result = await documentGenerator_1.documentGenerator.downloadDocumentFile(artifactId);
+        if (!result.success) {
+            res.status(404).send(result.error);
+            return;
+        }
+        // Set headers for file download
+        res.set({
+            'Content-Type': result.data.contentType,
+            'Content-Disposition': `attachment; filename="${result.data.fileName}"`,
+            'Content-Length': result.data.fileBuffer.length.toString()
+        });
+        res.send(result.data.fileBuffer);
+    }
+    catch (error) {
+        console.error('Error in downloadDocument endpoint:', error);
+        res.status(500).send('Internal server error');
+    }
+});
 // HTTP endpoints for public intake forms
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)({ origin: true }));
@@ -73,7 +104,9 @@ exports.intakeFormAPI = functions.https.onRequest(app);
 // Storage triggers
 exports.onTemplateUploaded = functions
     .runWith({
-    secrets: ["OPENAI_API_KEY"]
+    secrets: ["OPENAI_API_KEY"],
+    memory: "1GB",
+    timeoutSeconds: 540
 })
     .storage.object().onFinalize(templateParser_1.templateParser.onTemplateUploaded);
 // Firestore triggers

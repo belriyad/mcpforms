@@ -45,17 +45,31 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
 
     setUploading(true)
     
+    // Show debug information
+    console.log('🔍 Upload Debug Info:', {
+      fileName: selectedFile.name,
+      fileSize: (selectedFile.size / 1024 / 1024).toFixed(2) + ' MB',
+      fileType: selectedFile.type,
+      templateName: templateName.trim()
+    })
+    
+    const startTime = Date.now()
+    toast.loading('Getting upload URL from server...', { id: 'upload-progress' })
+    
     try {
       // Get upload URL from Cloud Function
       const uploadTemplateAndParse = httpsCallable(functions, 'uploadTemplateAndParse')
+      const functionCallStart = Date.now()
       const result = await uploadTemplateAndParse({
         fileName: selectedFile.name,
         fileType: selectedFile.name.split('.').pop()?.toLowerCase(),
         templateName: templateName.trim(),
       })
+      const functionCallTime = Date.now() - functionCallStart
 
       console.log('🔄 TemplateUpload: Function response:', result)
       console.log('🔄 TemplateUpload: Function response data:', result.data)
+      console.log('⏱️ Function call took:', functionCallTime, 'ms')
 
       // Check if the function returned an error
       if (!(result.data as any)?.success) {
@@ -72,6 +86,9 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
       const { uploadUrl } = responseData
 
       // Upload file to the signed URL
+      toast.loading('Uploading file to storage...', { id: 'upload-progress' })
+      const uploadStart = Date.now()
+      
       const uploadResponse = await fetch(uploadUrl, {
         method: 'PUT',
         body: selectedFile,
@@ -79,12 +96,19 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
           'Content-Type': selectedFile.type,
         },
       })
+      
+      const uploadTime = Date.now() - uploadStart
+      const totalTime = Date.now() - startTime
+      
+      console.log('⏱️ File upload took:', uploadTime, 'ms')
+      console.log('📊 Upload speed:', (selectedFile.size / 1024 / 1024 / (uploadTime / 1000)).toFixed(2), 'MB/s')
+      console.log('🎉 Total process took:', totalTime, 'ms')
 
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file')
+        throw new Error(`Failed to upload file (${uploadResponse.status}: ${uploadResponse.statusText})`)
       }
 
-      toast.success('Template uploaded successfully! AI parsing will begin shortly.')
+      toast.success('Template uploaded successfully! AI parsing will begin shortly.', { id: 'upload-progress' })
       onUploadComplete()
     } catch (error: any) {
       console.error('❌ TemplateUpload: Upload error:', error)

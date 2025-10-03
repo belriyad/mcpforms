@@ -15,7 +15,7 @@ export async function GET(
     }
 
     // Forward the request to our Cloud Function intakeFormAPI
-    const cloudFunctionUrl = `https://us-central1-mcpforms-dev.cloudfunctions.net/intakeFormAPI/intake/${token}`;
+    const cloudFunctionUrl = `https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}`;
     
     console.log(`🔗 Forwarding intake request to: ${cloudFunctionUrl}`);
 
@@ -84,8 +84,8 @@ export async function POST(
     
     // Forward the request to our Cloud Function intakeFormAPI
     const cloudFunctionUrl = isSubmit 
-      ? `https://us-central1-mcpforms-dev.cloudfunctions.net/submitIntakeForm`
-      : `https://us-central1-mcpforms-dev.cloudfunctions.net/intakeFormAPI/intake/${token}/save`;
+      ? `https://us-central1-formgenai-4545.cloudfunctions.net/submitIntakeForm`
+      : `https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}/save`;
     
     console.log(`🔗 Forwarding intake ${endpoint} to: ${cloudFunctionUrl}`);
 
@@ -117,7 +117,7 @@ export async function POST(
     if (isSubmit && data.success) {
       try {
         console.log('🔄 Triggering document generation...');
-        const docGenUrl = `https://us-central1-mcpforms-dev.cloudfunctions.net/generateDocumentsFromIntake`;
+        const docGenUrl = `https://us-central1-formgenai-4545.cloudfunctions.net/generateDocumentsFromIntake`;
         
         const docResponse = await fetch(docGenUrl, {
           method: 'POST',

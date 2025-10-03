@@ -260,6 +260,50 @@ exports.intakeManager = {
             res.status(500).json({ success: false, error: "Internal server error" });
         }
         return;
+    })
+        .post("/intake/:token/submit", async (req, res) => {
+        try {
+            const { token } = req.params;
+            const { formData, clientInfo } = req.body;
+            console.log('📤 HTTP API: Submitting intake form for token:', token);
+            if (!token || !formData) {
+                return res.status(400).json({ success: false, error: "Missing required fields" });
+            }
+            const intakeQuery = await db.collection("intakes")
+                .where("linkToken", "==", token)
+                .limit(1)
+                .get();
+            if (intakeQuery.empty) {
+                return res.status(404).json({ success: false, error: "Intake not found" });
+            }
+            const intakeDoc = intakeQuery.docs[0];
+            const intake = intakeDoc.data();
+            if (intake.expiresAt && intake.expiresAt.toDate() < new Date()) {
+                return res.status(410).json({ success: false, error: "Intake link has expired" });
+            }
+            // Check if intake is in valid state for submission
+            if (!["opened", "in-progress"].includes(intake.status)) {
+                return res.status(400).json({ success: false, error: "Intake is not available for submission" });
+            }
+            const updates = {
+                clientData: formData,
+                status: "submitted",
+                submittedAt: new Date(),
+                updatedAt: new Date(),
+            };
+            if (clientInfo) {
+                updates.clientName = clientInfo.name;
+                updates.clientEmail = clientInfo.email;
+            }
+            await db.collection("intakes").doc(intakeDoc.id).update(updates);
+            console.log('✅ HTTP API: Intake form submitted successfully for:', intakeDoc.id);
+            res.json({ success: true, message: "Intake form submitted successfully" });
+        }
+        catch (error) {
+            console.error("Error submitting intake form:", error);
+            res.status(500).json({ success: false, error: "Internal server error" });
+        }
+        return;
     }),
     async onIntakeStatusChange(change) {
         const before = change.before.data();

@@ -12,13 +12,17 @@ import { documentGenerator } from "./services/documentGenerator";
 // Template Upload and AI Parsing
 export const uploadTemplateAndParse = functions
   .runWith({
-    secrets: ["OPENAI_API_KEY"]
+    secrets: ["OPENAI_API_KEY"],
+    memory: "512MB",
+    timeoutSeconds: 120
   })
   .https.onCall(templateParser.uploadAndParse);
 
 export const processUploadedTemplate = functions
   .runWith({
-    secrets: ["OPENAI_API_KEY"]
+    secrets: ["OPENAI_API_KEY"],
+    memory: "1GB",
+    timeoutSeconds: 300
   })
   .https.onCall(templateParser.processUploadedTemplate);
 
@@ -36,6 +40,37 @@ export const approveIntakeForm = functions.https.onCall(intakeManager.approveInt
 export const generateDocumentsFromIntake = functions.https.onCall(documentGenerator.generateDocuments);
 export const getDocumentDownloadUrl = functions.https.onCall(documentGenerator.getDownloadUrl);
 
+// HTTP endpoint for downloading documents
+export const downloadDocument = functions.https.onRequest(async (req, res) => {
+  try {
+    const artifactId = req.path.split('/').pop();
+    
+    if (!artifactId) {
+      res.status(400).send('Artifact ID is required');
+      return;
+    }
+
+    const result = await documentGenerator.downloadDocumentFile(artifactId);
+    
+    if (!result.success) {
+      res.status(404).send(result.error);
+      return;
+    }
+
+    // Set headers for file download
+    res.set({
+      'Content-Type': result.data!.contentType,
+      'Content-Disposition': `attachment; filename="${result.data!.fileName}"`,
+      'Content-Length': result.data!.fileBuffer.length.toString()
+    });
+
+    res.send(result.data!.fileBuffer);
+  } catch (error) {
+    console.error('Error in downloadDocument endpoint:', error);
+    res.status(500).send('Internal server error');
+  }
+});
+
 // HTTP endpoints for public intake forms
 const app = express();
 app.use(cors({ origin: true }));
@@ -45,7 +80,9 @@ export const intakeFormAPI = functions.https.onRequest(app);
 // Storage triggers
 export const onTemplateUploaded = functions
   .runWith({
-    secrets: ["OPENAI_API_KEY"]
+    secrets: ["OPENAI_API_KEY"],
+    memory: "1GB",
+    timeoutSeconds: 540
   })
   .storage.object().onFinalize(templateParser.onTemplateUploaded);
 

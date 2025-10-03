@@ -34,6 +34,7 @@ export default function IntakeFormPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitted, setIsSubmitted] = useState(false)
   
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm()
 
@@ -43,7 +44,8 @@ export default function IntakeFormPage() {
 
   const fetchIntakeData = async () => {
     try {
-      const response = await fetch(`/api/intake/${token}`)
+      // Temporarily call Cloud Function directly to bypass Next.js API route issues
+      const response = await fetch(`https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}`)
       
       // Check if response is ok and content-type is JSON
       if (!response.ok) {
@@ -84,6 +86,12 @@ export default function IntakeFormPage() {
 
       setIntakeData(validatedData)
       
+      // Set submitted flag if form is already submitted
+      if (validatedData.status === 'submitted') {
+        setIsSubmitted(true)
+        console.log('📝 Form already submitted, auto-save disabled')
+      }
+      
       // Pre-fill form with existing data
       if (validatedData.clientData && Object.keys(validatedData.clientData).length > 0) {
         Object.entries(validatedData.clientData).forEach(([key, value]) => {
@@ -101,14 +109,29 @@ export default function IntakeFormPage() {
   }
 
   const saveProgress = async (formData: Record<string, any>) => {
+    // Don't save if form is already submitted (check both flags)
+    if (isSubmitted || intakeData?.status === 'submitted') {
+      console.log('🚫 Not saving progress - form already submitted', { 
+        isSubmitted, 
+        status: intakeData?.status 
+      })
+      return
+    }
+    
     try {
-      await fetch(`/api/intake/${token}/save`, {
+      console.log('💾 Auto-saving progress...', { 
+        status: intakeData?.status,
+        isSubmitted 
+      })
+      // Temporarily call Cloud Function directly to bypass Next.js API route issues
+      await fetch(`https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ formData }),
       })
+      console.log('✅ Progress saved successfully')
     } catch (err) {
       console.error('Error saving progress:', err)
     }
@@ -120,25 +143,42 @@ export default function IntakeFormPage() {
     setSubmitting(true)
 
     try {
-      const response = await fetch(`/api/intake/${token}/submit`, {
+      console.log('🚀 Submitting form data:', { intakeId: intakeData.intakeId, formData })
+      
+      // Call the HTTP API submit endpoint
+      const response = await fetch(`https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          intakeId: intakeData.intakeId,
           formData,
           clientInfo: {
             name: formData.clientName || '',
             email: formData.clientEmail || '',
-          },
+          }
         }),
       })
 
+      console.log('📡 Response status:', response.status, response.statusText)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Submit error response:', errorText)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+
       const result = await response.json()
+      console.log('✅ Submit result:', result)
 
       if (result.success) {
         toast.success('Form submitted successfully!')
+        // Set submitted flag immediately to stop all auto-save
+        setIsSubmitted(true)
+        // Update local status immediately
+        if (intakeData) {
+          setIntakeData({ ...intakeData, status: 'submitted' })
+        }
         // Refresh data to show updated status
         await fetchIntakeData()
       } else {
@@ -154,17 +194,33 @@ export default function IntakeFormPage() {
 
   // Auto-save progress every 30 seconds
   useEffect(() => {
-    if (!intakeData || intakeData.status === 'submitted') return
+    if (!intakeData || intakeData.status === 'submitted' || isSubmitted) {
+      console.log('🚫 Auto-save disabled', { 
+        hasIntakeData: !!intakeData, 
+        status: intakeData?.status,
+        isSubmitted 
+      })
+      return
+    }
 
     const formData = watch()
+    console.log('⚡ Auto-save enabled, setting up interval')
     const interval = setInterval(() => {
-      if (Object.keys(formData).length > 0) {
+      console.log('🕐 Auto-save interval triggered', { 
+        hasFormData: Object.keys(formData).length > 0,
+        isSubmitted,
+        status: intakeData?.status 
+      })
+      if (Object.keys(formData).length > 0 && !isSubmitted) {
         saveProgress(formData)
       }
     }, 30000)
 
-    return () => clearInterval(interval)
-  }, [intakeData, watch])
+    return () => {
+      console.log('🧹 Auto-save interval cleared')
+      clearInterval(interval)
+    }
+  }, [intakeData, watch, isSubmitted])
 
   const renderField = (field: FormField) => {
     const fieldProps = {
@@ -262,8 +318,6 @@ export default function IntakeFormPage() {
   if (!intakeData) {
     return null
   }
-
-  const isSubmitted = intakeData.status === 'submitted'
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

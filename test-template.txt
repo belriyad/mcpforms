@@ -1,0 +1,26 @@
+TEMPLATE UPLOAD TEST DOCUMENT
+
+This is a test document for validating the template upload functionality.
+
+Required Fields for Testing:
+- Client Name: _______________
+- Client Address: _______________
+- Phone Number: _______________
+- Email Address: _______________
+- Service Type: _______________
+- Date of Service: _______________
+- Special Instructions: _______________
+
+Additional Information:
+- Emergency Contact: _______________
+- Preferred Contact Method: _______________
+- Budget Range: _______________
+- Timeline: _______________
+
+Agreement:
+I agree to the terms and conditions: [ ] Yes [ ] No
+
+Signature: ____________________
+Date: ____________________
+
+This test document should be parsed by the AI to extract all the fields above.
