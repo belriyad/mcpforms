@@ -11,9 +11,9 @@ const db = admin.firestore();
 const storage = admin.storage();
 
 export const documentGenerator = {
-  async generateDocuments(data: { intakeId: string }): Promise<ApiResponse<{ artifactIds: string[] }>> {
+  async generateDocuments(data: { intakeId: string; regenerate?: boolean }): Promise<ApiResponse<{ artifactIds: string[] }>> {
     try {
-      const { intakeId } = data;
+      const { intakeId, regenerate = false } = data;
 
       if (!intakeId) {
         return { success: false, error: "Intake ID is required" };
@@ -26,8 +26,13 @@ export const documentGenerator = {
       }
 
       const intake = { ...intakeDoc.data(), id: intakeId } as Intake;
-      if (intake.status !== "approved") {
+      if (!regenerate && intake.status !== "approved") {
         return { success: false, error: "Intake must be approved before generating documents" };
+      }
+      
+      // For regeneration, allow both approved and documents-generated status
+      if (regenerate && !["approved", "documents-generated"].includes(intake.status)) {
+        return { success: false, error: "Intake must be approved or have documents generated to regenerate documents" };
       }
 
       // Get service and templates
@@ -50,6 +55,11 @@ export const documentGenerator = {
 
       if (templates.length === 0) {
         return { success: false, error: "No templates found for service" };
+      }
+
+      // If regenerating, delete existing artifacts
+      if (regenerate) {
+        await documentGenerator.deleteExistingArtifacts(intakeId);
       }
 
       // Generate documents for each template
@@ -78,7 +88,7 @@ export const documentGenerator = {
       return {
         success: true,
         data: { artifactIds },
-        message: `Successfully generated ${artifactIds.length} documents`,
+        message: `Successfully ${regenerate ? 'regenerated' : 'generated'} ${artifactIds.length} documents`,
       };
     } catch (error) {
       console.error("Error generating documents:", error);
@@ -166,6 +176,35 @@ export const documentGenerator = {
       // First, let's examine the template content
       console.log("Template loaded, checking for placeholders...");
       
+      // Extract the main document XML to look for placeholders
+      try {
+        const documentXml = zip.files["word/document.xml"];
+        if (documentXml) {
+          const xmlContent = documentXml.asText();
+          console.log("Document XML length:", xmlContent.length);
+          
+          // Look for placeholder patterns like {{fieldName}}
+          const placeholderMatches = xmlContent.match(/\{\{[^}]+\}\}/g);
+          if (placeholderMatches) {
+            console.log("Found placeholders in template:", placeholderMatches);
+          } else {
+            console.log("NO PLACEHOLDERS FOUND in template XML!");
+          }
+          
+          // Also check for simple text patterns that might contain field names
+          const clientDataKeys = Object.keys(clientData);
+          for (const key of clientDataKeys) {
+            if (xmlContent.includes(key)) {
+              console.log(`Found field name "${key}" in document XML`);
+            }
+          }
+        } else {
+          console.log("Could not find word/document.xml in template");
+        }
+      } catch (xmlError) {
+        console.error("Error examining document XML:", xmlError);
+      }
+      
       const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
@@ -186,12 +225,39 @@ export const documentGenerator = {
 
       console.log("Setting template data:", templateData);
 
-      // Set the data and render the document
-      doc.setData(templateData);
-      
+      // Set the data and render the document using new API
       try {
-        doc.render();
+        doc.render(templateData);
         console.log("Document rendered successfully with docxtemplater");
+        
+        // After rendering, let's check what the document looks like
+        try {
+          const renderedXml = doc.getZip().files["word/document.xml"];
+          if (renderedXml) {
+            const renderedContent = renderedXml.asText();
+            console.log("Rendered document XML length:", renderedContent.length);
+            
+            // Check if any of our data values appear in the rendered content
+            for (const [key, value] of Object.entries(templateData)) {
+              if (value && renderedContent.includes(value)) {
+                console.log(`✅ Data value "${value}" found in rendered document`);
+              } else {
+                console.log(`❌ Data value "${value}" NOT found in rendered document`);
+              }
+            }
+            
+            // Look for any remaining placeholders
+            const remainingPlaceholders = renderedContent.match(/\{\{[^}]+\}\}/g);
+            if (remainingPlaceholders) {
+              console.log("⚠️ Unfilled placeholders still remain:", remainingPlaceholders);
+            } else {
+              console.log("✅ No unfilled placeholders found");
+            }
+          }
+        } catch (debugError) {
+          console.error("Error during post-render debugging:", debugError);
+        }
+        
       } catch (renderError) {
         console.error("Docxtemplater render error:", renderError);
         
@@ -201,6 +267,21 @@ export const documentGenerator = {
         }
         
         throw renderError;
+      }
+
+      // Check if any data was actually filled
+      let dataWasFilled = false;
+      for (const [key, value] of Object.entries(templateData)) {
+        if (value && doc.getZip().files["word/document.xml"].asText().includes(value)) {
+          dataWasFilled = true;
+          break;
+        }
+      }
+
+      if (!dataWasFilled) {
+        console.log("⚠️ No data was filled by docxtemplater - template may have no placeholders");
+        console.log("🔄 Attempting smart text replacement fallback...");
+        return await this.fillWordDocumentWithSmartReplacement(templateBuffer, clientData);
       }
 
       // Generate the filled document
@@ -451,6 +532,188 @@ export const documentGenerator = {
     } catch (error) {
       console.error("Error downloading document file:", error);
       return { success: false, error: `Failed to download document file: ${error instanceof Error ? error.message : "Unknown error"}` };
+    }
+  },
+
+  async deleteExistingArtifacts(intakeId: string): Promise<void> {
+    try {
+      // Get all existing artifacts for this intake
+      const artifactsQuery = await db.collection("documentArtifacts")
+        .where("intakeId", "==", intakeId)
+        .get();
+
+      const deletePromises: Promise<void>[] = [];
+
+      for (const doc of artifactsQuery.docs) {
+        const artifact = doc.data() as DocumentArtifact;
+        
+        // Delete from storage if file exists
+        if (artifact.fileUrl) {
+          const file = storage.bucket().file(artifact.fileUrl);
+          deletePromises.push(
+            file.exists().then(([exists]) => {
+              if (exists) {
+                return file.delete().then(() => {
+                  console.log(`Deleted file from storage: ${artifact.fileUrl}`);
+                });
+              }
+              return Promise.resolve();
+            }).catch(error => {
+              console.error(`Error deleting file ${artifact.fileUrl}:`, error);
+              // Don't throw - continue with other deletions
+              return Promise.resolve();
+            })
+          );
+        }
+
+        // Delete document artifact record
+        deletePromises.push(
+          doc.ref.delete().then(() => {
+            console.log(`Deleted artifact record: ${doc.id}`);
+          }).catch(error => {
+            console.error(`Error deleting artifact record ${doc.id}:`, error);
+            // Don't throw - continue with other deletions
+          })
+        );
+      }
+
+      await Promise.all(deletePromises);
+      console.log(`Successfully cleaned up existing artifacts for intake ${intakeId}`);
+    } catch (error) {
+      console.error("Error deleting existing artifacts:", error);
+      // Don't throw - let regeneration continue
+    }
+  },
+
+  async fillWordDocumentWithSmartReplacement(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer> {
+    try {
+      console.log("=== SMART TEXT REPLACEMENT APPROACH ===");
+      
+      const PizZip = require('pizzip');
+      const zip = new PizZip(templateBuffer);
+      
+      // Get the main document XML
+      const documentXml = zip.files["word/document.xml"];
+      if (!documentXml) {
+        console.log("Could not find document.xml, returning original");
+        return templateBuffer;
+      }
+      
+      let xmlContent = documentXml.asText();
+      console.log("Original document XML length:", xmlContent.length);
+      
+      // Define replacement patterns - these are common patterns in legal documents
+      const replacementPatterns = [
+        // Name patterns
+        { pattern: /NAME:\s*_+/gi, field: 'fullName', description: 'Name field with underlines' },
+        { pattern: /Name:\s*_+/g, field: 'fullName', description: 'Name field with underlines' },
+        { pattern: /\[NAME\]/gi, field: 'fullName', description: 'Name in brackets' },
+        { pattern: /\[Client Name\]/gi, field: 'fullName', description: 'Client name in brackets' },
+        { pattern: /\[FULL NAME\]/gi, field: 'fullName', description: 'Full name in brackets' },
+        
+        // Email patterns
+        { pattern: /EMAIL:\s*_+/gi, field: 'email', description: 'Email field with underlines' },
+        { pattern: /Email:\s*_+/g, field: 'email', description: 'Email field with underlines' },
+        { pattern: /\[EMAIL\]/gi, field: 'email', description: 'Email in brackets' },
+        { pattern: /\[EMAIL ADDRESS\]/gi, field: 'email', description: 'Email address in brackets' },
+        
+        // Phone patterns
+        { pattern: /PHONE:\s*_+/gi, field: 'phone', description: 'Phone field with underlines' },
+        { pattern: /Phone:\s*_+/g, field: 'phone', description: 'Phone field with underlines' },
+        { pattern: /\[PHONE\]/gi, field: 'phone', description: 'Phone in brackets' },
+        { pattern: /\[PHONE NUMBER\]/gi, field: 'phone', description: 'Phone number in brackets' },
+        
+        // Date patterns
+        { pattern: /DATE:\s*_+/gi, field: 'documentDate', description: 'Date field with underlines' },
+        { pattern: /Date:\s*_+/g, field: 'documentDate', description: 'Date field with underlines' },
+        { pattern: /\[DATE\]/gi, field: 'documentDate', description: 'Date in brackets' },
+        { pattern: /\[DOCUMENT DATE\]/gi, field: 'documentDate', description: 'Document date in brackets' },
+        
+        // Address patterns
+        { pattern: /ADDRESS:\s*_+/gi, field: 'propertyAddress', description: 'Address field with underlines' },
+        { pattern: /Address:\s*_+/g, field: 'propertyAddress', description: 'Address field with underlines' },
+        { pattern: /\[ADDRESS\]/gi, field: 'propertyAddress', description: 'Address in brackets' },
+        { pattern: /\[PROPERTY ADDRESS\]/gi, field: 'propertyAddress', description: 'Property address in brackets' },
+        
+        // Trustee patterns
+        { pattern: /TRUSTEE:\s*_+/gi, field: 'trusteeName', description: 'Trustee field with underlines' },
+        { pattern: /Trustee:\s*_+/g, field: 'trusteeName', description: 'Trustee field with underlines' },
+        { pattern: /\[TRUSTEE\]/gi, field: 'trusteeName', description: 'Trustee in brackets' },
+        { pattern: /\[TRUSTEE NAME\]/gi, field: 'trusteeName', description: 'Trustee name in brackets' },
+        
+        // Generic placeholder patterns for any unmapped fields
+        { pattern: /\[BENEFICIARIES\]/gi, field: 'beneficiaries', description: 'Beneficiaries in brackets' },
+        { pattern: /\[ADDITIONAL NOTES\]/gi, field: 'additionalNotes', description: 'Additional notes in brackets' },
+        { pattern: /\[GRANTOR\]/gi, field: 'grantorName', description: 'Grantor in brackets' },
+        { pattern: /\[GRANTEE\]/gi, field: 'granteeName', description: 'Grantee in brackets' },
+      ];
+      
+      let replacementsMade = 0;
+      
+      // Apply replacements
+      for (const pattern of replacementPatterns) {
+        const fieldValue = clientData[pattern.field];
+        if (fieldValue && xmlContent.match(pattern.pattern)) {
+          const beforeLength = xmlContent.length;
+          xmlContent = xmlContent.replace(pattern.pattern, String(fieldValue));
+          const afterLength = xmlContent.length;
+          
+          if (beforeLength !== afterLength) {
+            replacementsMade++;
+            console.log(`✅ Replaced ${pattern.description} with "${fieldValue}"`);
+          }
+        }
+      }
+      
+      if (replacementsMade === 0) {
+        console.log("⚠️ No text patterns found to replace. Template may need manual placeholders.");
+        console.log("📝 Consider adding placeholders like {{fullName}}, {{email}}, etc. to your template");
+        
+        // Try some generic replacements for common static text
+        const genericReplacements = [
+          { search: "Client Name", replace: clientData.fullName || "Client Name" },
+          { search: "CLIENT NAME", replace: (clientData.fullName || "CLIENT NAME").toUpperCase() },
+          { search: "Email Address", replace: clientData.email || "Email Address" },
+          { search: "EMAIL ADDRESS", replace: (clientData.email || "EMAIL ADDRESS").toUpperCase() },
+          { search: "Phone Number", replace: clientData.phone || "Phone Number" },
+          { search: "PHONE NUMBER", replace: (clientData.phone || "PHONE NUMBER").toUpperCase() },
+        ];
+        
+        for (const replacement of genericReplacements) {
+          if (xmlContent.includes(replacement.search)) {
+            xmlContent = xmlContent.replace(new RegExp(replacement.search, 'g'), replacement.replace);
+            replacementsMade++;
+            console.log(`✅ Generic replacement: "${replacement.search}" → "${replacement.replace}"`);
+          }
+        }
+      }
+      
+      console.log(`📊 Total replacements made: ${replacementsMade}`);
+      
+      if (replacementsMade > 0) {
+        // Update the document XML in the zip
+        zip.files["word/document.xml"] = {
+          ...documentXml,
+          asText: () => xmlContent,
+          asBinary: () => xmlContent
+        };
+        
+        // Generate updated document
+        const updatedBuffer = zip.generate({
+          type: 'nodebuffer',
+          compression: 'DEFLATE',
+        });
+        
+        console.log("✅ Smart text replacement completed successfully");
+        return updatedBuffer;
+      } else {
+        console.log("❌ No replacements made, returning original document");
+        return templateBuffer;
+      }
+      
+    } catch (error) {
+      console.error("Error in smart text replacement:", error);
+      return templateBuffer;
     }
   },
 };

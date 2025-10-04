@@ -104,6 +104,17 @@ export default function IntakeMonitor() {
     }
   }
 
+  const handleRegenerateDocuments = async (intakeId: string) => {
+    try {
+      const generateDocumentsFromIntake = httpsCallable(functions, 'generateDocumentsFromIntake')
+      await generateDocumentsFromIntake({ intakeId, regenerate: true })
+      toast.success('Document regeneration started')
+    } catch (error: any) {
+      console.error('Error regenerating documents:', error)
+      toast.error(error.message || 'Failed to regenerate documents')
+    }
+  }
+
   const copyIntakeLink = (intake: Intake) => {
     const baseUrl = window.location.origin
     const intakeUrl = `${baseUrl}/intake/${intake.linkToken}`
@@ -366,15 +377,23 @@ export default function IntakeMonitor() {
                                 </div>
                                 
                                 {artifact.status === 'generated' && (
-                                  <button
-                                    onClick={() => handleDownloadDocument(artifact.id, artifact.fileName)}
-                                    className="btn btn-sm btn-outline text-primary-600 border-primary-300 hover:bg-primary-50"
-                                    title="Download document"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                  </button>
+                                  <div className="flex items-center space-x-2">
+                                    {/* Show regenerated badge if document was recently generated (within last 5 minutes) */}
+                                    {artifact.generatedAt && new Date().getTime() - artifact.generatedAt.toDate().getTime() < 5 * 60 * 1000 && (
+                                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">
+                                        Recently Updated
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => handleDownloadDocument(artifact.id, artifact.fileName)}
+                                      className="btn btn-sm btn-outline text-primary-600 border-primary-300 hover:bg-primary-50"
+                                      title="Download document"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             ))}
@@ -415,6 +434,19 @@ export default function IntakeMonitor() {
                         className="btn btn-sm btn-primary"
                       >
                         Generate Documents
+                      </button>
+                    )}
+
+                    {intake.status === 'documents-generated' && (
+                      <button
+                        onClick={() => handleRegenerateDocuments(intake.id)}
+                        className="btn btn-sm btn-outline text-orange-600 border-orange-300 hover:bg-orange-50"
+                        title="Regenerate documents with updated templates or fixes"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Regenerate
                       </button>
                     )}
                     

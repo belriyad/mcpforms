@@ -2,6 +2,7 @@ import { Intake, Template, ApiResponse } from "../types";
 export declare const documentGenerator: {
     generateDocuments(data: {
         intakeId: string;
+        regenerate?: boolean;
     }): Promise<ApiResponse<{
         artifactIds: string[];
     }>>;
@@ -19,5 +20,7 @@ export declare const documentGenerator: {
         fileName: string;
         contentType: string;
     }>>;
+    deleteExistingArtifacts(intakeId: string): Promise<void>;
+    fillWordDocumentWithSmartReplacement(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer>;
 };
 //# sourceMappingURL=documentGenerator.d.ts.map
