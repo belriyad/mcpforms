@@ -5,6 +5,7 @@ import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestor
 import { db } from '@/lib/firebase'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import TemplateUpload from './TemplateUpload'
+import TemplateEditor from './TemplateEditor'
 
 interface Template {
   id: string
@@ -21,6 +22,7 @@ export default function TemplateManager() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -177,6 +179,17 @@ export default function TemplateManager() {
                     {template.status === 'parsing' && (
                       <LoadingSpinner size="sm" />
                     )}
+                    {template.status === 'parsed' && (
+                      <button
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        className="text-blue-600 hover:text-blue-800 p-2"
+                        title="Edit template"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(template.id)}
                       className="text-red-600 hover:text-red-800 p-2"
@@ -198,6 +211,13 @@ export default function TemplateManager() {
         <TemplateUpload
           onClose={() => setShowUpload(false)}
           onUploadComplete={() => setShowUpload(false)}
+        />
+      )}
+
+      {selectedTemplateId && (
+        <TemplateEditor
+          templateId={selectedTemplateId}
+          onClose={() => setSelectedTemplateId(null)}
         />
       )}
     </div>
