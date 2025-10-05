@@ -119,13 +119,18 @@ export const documentGenerator = {
       const [templateBuffer] = await templateFile.download();
 
       // Generate filled document based on file type
-      console.log(`Generating document for template ${template.id} with client data:`, intake.clientData);
+      console.log(`🔍 DEBUGGING CLIENT DATA AVAILABILITY:`);
+      console.log(`   intake.clientData:`, intake.clientData);
+      console.log(`   intake.formData:`, (intake as any).formData);
+      console.log(`   All intake properties:`, Object.keys(intake));
       console.log(`Template file type: ${template.fileType}`);
       
       let filledBuffer: Buffer;
       
       if (template.fileType === "docx") {
-        filledBuffer = await documentGenerator.fillWordDocument(templateBuffer, intake.clientData);
+        console.log("[v2.2] ABOUT TO CALL fillWordDocument");
+        filledBuffer = await documentGenerator.fillWordDocument(templateBuffer, intake.clientData, template);
+        console.log("[v2.2] RETURNED FROM fillWordDocument");
       } else if (template.fileType === "pdf") {
         filledBuffer = await documentGenerator.fillPdfDocument(templateBuffer, intake.clientData);
       } else {
@@ -159,57 +164,299 @@ export const documentGenerator = {
     }
   },
 
-  async fillWordDocument(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer> {
+  async fillWordDocument(templateBuffer: Buffer, clientData: Record<string, any>, template?: any): Promise<Buffer> {
     // For Word documents, we'll use docxtemplater for proper template filling
     try {
-      console.log("=== STARTING WORD DOCUMENT FILLING ===");
-      console.log("Client data keys:", Object.keys(clientData));
-      console.log("Client data values:", clientData);
+      // MUST RUN: Critical entry point validation
+      console.log("[TRIAGE-v3.0] ========== FILLWORDDOCUMENT START ==========");
+      console.log("[TRIAGE-v3.0] EXECUTION PROOF:", Date.now());
+      console.log("[TRIAGE-v3.0] Buffer validation:", {
+        isBuffer: Buffer.isBuffer(templateBuffer),
+        isUint8Array: templateBuffer instanceof Uint8Array,
+        length: templateBuffer?.length,
+        hasData: templateBuffer && templateBuffer.length > 0
+      });
+      
+      if (!Buffer.isBuffer(templateBuffer) || templateBuffer.length === 0) {
+        throw new Error("MUSTRUN FAILED: Invalid template buffer");
+      }
+      
+      console.log("[TRIAGE-v3.0] Client data keys:", Object.keys(clientData));
+      console.log("[TRIAGE-v3.0] Client data sample:", Object.keys(clientData).slice(0, 3).map(k => `${k}=${clientData[k]}`));
+      console.log("[TRIAGE-v3.0] Template info:", template ? { id: template.id, name: template.name } : 'no template metadata');
       
       // Use docxtemplater approach with zip manipulation
       const PizZip = require('pizzip');
       const Docxtemplater = require('docxtemplater');
       
-      // Load the template
-      const zip = new PizZip(templateBuffer);
-      
-      // First, let's examine the template content
-      console.log("Template loaded, checking for placeholders...");
-      
-      // Extract the main document XML to look for placeholders
+      // Load the template - MUSTRUN: Verify PizZip doesn't throw
+      console.log("[TRIAGE-v3.0] Attempting to load template with PizZip...");
+      let zip;
       try {
-        const documentXml = zip.files["word/document.xml"];
-        if (documentXml) {
-          const xmlContent = documentXml.asText();
-          console.log("Document XML length:", xmlContent.length);
-          
-          // Look for placeholder patterns like {{fieldName}}
-          const placeholderMatches = xmlContent.match(/\{\{[^}]+\}\}/g);
-          if (placeholderMatches) {
-            console.log("Found placeholders in template:", placeholderMatches);
-          } else {
-            console.log("NO PLACEHOLDERS FOUND in template XML!");
-          }
-          
-          // Also check for simple text patterns that might contain field names
-          const clientDataKeys = Object.keys(clientData);
-          for (const key of clientDataKeys) {
-            if (xmlContent.includes(key)) {
-              console.log(`Found field name "${key}" in document XML`);
-            }
-          }
-        } else {
-          console.log("Could not find word/document.xml in template");
-        }
-      } catch (xmlError) {
-        console.error("Error examining document XML:", xmlError);
+        zip = new PizZip(templateBuffer);
+        console.log("[TRIAGE-v3.0] ✅ PizZip loaded successfully");
+      } catch (zipError) {
+        console.error("[TRIAGE-v3.0] ❌ MUSTRUN FAILED: PizZip construction error:", zipError);
+        throw new Error(`PizZip failed: ${zipError instanceof Error ? zipError.message : String(zipError)}`);
       }
       
+      // MUSTRUN: Extract and examine ALL document parts (main, header, footer)
+      console.log("[TRIAGE-v3.0] Examining template structure...");
+      console.log("[TRIAGE-v3.0] Available files in zip:", Object.keys(zip.files).filter(f => f.includes('xml')));
+      
+      // Extract the main document XML to look for placeholders
+      let documentXml = zip.files["word/document.xml"];
+      let headerXml = zip.files["word/header1.xml"] || zip.files["word/header.xml"];
+      let footerXml = zip.files["word/footer1.xml"] || zip.files["word/footer.xml"];
+      
+      if (!documentXml) {
+        throw new Error("MUSTRUN FAILED: word/document.xml not found in template");
+      }
+      
+      // Track replacements outside try-catch for access later
+      let quotedReplacementsTotal = 0;
+      
+      try {
+        let xmlContent = documentXml.asText();
+        console.log("[TRIAGE-v3.0] Document XML extracted, length:", xmlContent.length);
+        
+        // Normalize smart quotes to ASCII before any processing
+        console.log("[TRIAGE-v3.0] Normalizing smart quotes to ASCII...");
+        const beforeNormalization = xmlContent.substring(0, 200);
+        xmlContent = xmlContent
+          .replace(/[\u2018\u2019]/g, "'")  // Smart single quotes → ASCII apostrophe
+          .replace(/[\u201C\u201D]/g, '"')  // Smart double quotes → ASCII quote
+          .replace(/\u2013/g, '-')          // En dash → hyphen
+          .replace(/\u2014/g, '--');        // Em dash → double hyphen
+        
+        if (beforeNormalization !== xmlContent.substring(0, 200)) {
+          console.log("[TRIAGE-v3.0] ✅ Smart quotes normalized");
+        }
+        
+        // Collapse split w:t runs that might break quoted placeholder matching
+        console.log("[TRIAGE-v3.0] Collapsing split <w:t> runs...");
+        const beforeCollapseLength = xmlContent.length;
+        // Pattern: </w:t></w:r><w:r><w:t> (with optional attributes) → merge text nodes
+        xmlContent = xmlContent.replace(/<\/w:t><\/w:r>\s*<w:r[^>]*>\s*<w:t[^>]*>/g, '');
+        
+        if (xmlContent.length !== beforeCollapseLength) {
+          console.log(`[TRIAGE-v3.0] ✅ Collapsed split runs (${beforeCollapseLength} → ${xmlContent.length} bytes)`);
+        }
+        
+        console.log("[TRIAGE-v3.0] XML after normalization length:", xmlContent.length);
+          
+        // Look for placeholder patterns like {{fieldName}}
+        const standardPlaceholders = xmlContent.match(/\{\{[^}]+\}\}/g);
+        console.log("[TRIAGE-v3.0] Standard {{placeholders}}:", standardPlaceholders ? standardPlaceholders.length : 0);
+        if (standardPlaceholders) {
+          console.log("[TRIAGE-v3.0] Found standard placeholders:", standardPlaceholders.slice(0, 5));
+        }
+        
+        // Look for quoted placeholders
+        const quotedPlaceholderPattern = /"[^"]{3,50}"/g;
+        const potentialQuotedPlaceholders = xmlContent.match(quotedPlaceholderPattern);
+        console.log("[TRIAGE-v3.0] Potential quoted placeholders:", potentialQuotedPlaceholders ? potentialQuotedPlaceholders.length : 0);
+        if (potentialQuotedPlaceholders) {
+          console.log("[TRIAGE-v3.0] Sample quoted text:", potentialQuotedPlaceholders.slice(0, 10));
+        }
+        
+        // Check for specific Certificate of Trust quoted placeholders
+        const certificateQuotedFields = [
+          "Trust's name",
+          "Grantor's name",
+          "county",
+          "execution day",
+          "execution month",
+          "execution year"
+        ];
+        
+        console.log("[TRIAGE-v3.0] Checking for Certificate of Trust quoted fields...");
+        let foundCertificateFields = 0;
+        for (const field of certificateQuotedFields) {
+          const quoted = '"' + field + '"';
+          if (xmlContent.includes(quoted)) {
+            console.log(`[TRIAGE-v3.0] ✅ FOUND: ${quoted}`);
+            foundCertificateFields++;
+          }
+        }
+        
+        console.log(`[TRIAGE-v3.0] Certificate fields detected: ${foundCertificateFields}/${certificateQuotedFields.length}`);
+      
+        // MUSTRUN: Replace quoted placeholders BEFORE docxtemplater processing
+        console.log("[TRIAGE-v3.0] ========== APPLYING QUOTED PLACEHOLDER REPLACEMENTS ==========");
+        
+        let quotedReplacements = 0;
+        let quotedPlaceholdersFound = 0;
+        let quotedPlaceholdersMissing = 0;
+        
+        // Certificate of Trust specific quoted placeholder replacements
+        // Expanded with many variations to handle different template formats
+        const quotedPlaceholderMappings = [
+          // Trust name variations
+          { search: '"Trust\'s name"', field: 'trust_name', required: true },
+          { search: '"trust name"', field: 'trust_name', required: false },
+          { search: '"name of trust"', field: 'trust_name', required: false },
+          { search: '"Name of Trust"', field: 'trust_name', required: false },
+          
+          // Grantor name variations
+          { search: '"Grantor\'s name"', field: 'grantor_names', required: true },
+          { search: '"Grantor\'s name or names in case of multiple grantors"', field: 'grantor_names', required: false },
+          { search: '"Name of Grantor"', field: 'grantor_names', required: false },
+          { search: '"grantor name"', field: 'grantor_names', required: false },
+          { search: '"Grantor"', field: 'grantor_names', required: false },
+          
+          // Trustee variations
+          { search: '"current trustees"', field: 'current_trustees', required: false },
+          { search: '"Current Trustees"', field: 'current_trustees', required: false },
+          { search: '"current trustee"', field: 'current_trustees', required: false },
+          { search: '"trustee name"', field: 'current_trustees', required: false },
+          
+          { search: '"successor trustees"', field: 'successor_trustees', required: false },
+          { search: '"Successor Trustees"', field: 'successor_trustees', required: false },
+          { search: '"successor trustee"', field: 'successor_trustees', required: false },
+          
+          { search: '"successor co-trustees"', field: 'successor_co_trustees', required: false },
+          { search: '"Successor Co-Trustees"', field: 'successor_co_trustees', required: false },
+          
+          // Notary variations
+          { search: '"notary public name"', field: 'notary_public_name', required: false },
+          { search: '"Notary Public Name"', field: 'notary_public_name', required: false },
+          { search: '"notary name"', field: 'notary_public_name', required: false },
+          { search: '"Notary"', field: 'notary_public_name', required: false },
+          
+          // Location variations
+          { search: '"county"', field: 'county', required: true },
+          { search: '"County"', field: 'county', required: false },
+          { search: '"county name"', field: 'county', required: false },
+          
+          // Date variations
+          { search: '"execution day"', field: 'execution_day', required: false },
+          { search: '"Execution Day"', field: 'execution_day', required: false },
+          { search: '"day"', field: 'execution_day', required: false },
+          { search: '"DD"', field: 'execution_day', required: false },
+          
+          { search: '"execution month"', field: 'execution_month', required: false },
+          { search: '"Execution Month"', field: 'execution_month', required: false },
+          { search: '"month"', field: 'execution_month', required: false },
+          { search: '"MM"', field: 'execution_month', required: false },
+          
+          { search: '"execution year"', field: 'execution_year', required: false },
+          { search: '"Execution Year"', field: 'execution_year', required: false },
+          { search: '"year"', field: 'execution_year', required: false },
+          { search: '"YYYY"', field: 'execution_year', required: false },
+          
+          { search: '"notary commission expires"', field: 'notary_commission_expires', required: false },
+          { search: '"Notary Commission Expires"', field: 'notary_commission_expires', required: false },
+          { search: '"commission expires"', field: 'notary_commission_expires', required: false },
+          { search: '"expiration date"', field: 'notary_commission_expires', required: false },
+          
+          { search: '"signature authority"', field: 'signature_authority', required: false },
+          { search: '"Signature Authority"', field: 'signature_authority', required: false },
+          { search: '"signing authority"', field: 'signature_authority', required: false }
+        ];
+        
+        for (const mapping of quotedPlaceholderMappings) {
+          const clientValue = clientData[mapping.field];
+          const placeholderExists = xmlContent.includes(mapping.search);
+          
+          if (placeholderExists) {
+            quotedPlaceholdersFound++;
+            console.log(`[TRIAGE-v3.0] Found quoted placeholder: ${mapping.search}`);
+            
+            if (clientValue) {
+              try {
+                const beforeCount = (xmlContent.match(new RegExp(escapeRegExp(mapping.search), 'g')) || []).length;
+                xmlContent = xmlContent.replace(new RegExp(escapeRegExp(mapping.search), 'g'), String(clientValue));
+                const afterCount = (xmlContent.match(new RegExp(escapeRegExp(mapping.search), 'g')) || []).length;
+                const replacements = beforeCount - afterCount;
+                
+                if (replacements > 0) {
+                  quotedReplacements += replacements;
+                  console.log(`[TRIAGE-v3.0] ✅ REPLACED: ${mapping.search} → "${clientValue}" (${replacements}x)`);
+                } else {
+                  console.log(`[TRIAGE-v3.0] ⚠️ FAILED to replace: ${mapping.search}`);
+                }
+              } catch (replaceError) {
+                console.error(`[TRIAGE-v3.0] ❌ Error replacing ${mapping.search}:`, replaceError);
+              }
+            } else {
+              console.log(`[TRIAGE-v3.0] ⚠️ No client data for field: ${mapping.field}`);
+              if (mapping.required) {
+                quotedPlaceholdersMissing++;
+              }
+            }
+          }
+        }
+        
+        console.log(`[TRIAGE-v3.0] ========== REPLACEMENT SUMMARY ==========`);
+        console.log(`[TRIAGE-v3.0] Quoted placeholders found: ${quotedPlaceholdersFound}`);
+        console.log(`[TRIAGE-v3.0] Successful replacements: ${quotedReplacements}`);
+        console.log(`[TRIAGE-v3.0] Missing required data: ${quotedPlaceholdersMissing}`);
+        
+        // Store for outer scope access
+        quotedReplacementsTotal = quotedReplacements;
+        
+        // MUSTRUN: If template has quoted placeholders but none were replaced, ABORT
+        if (quotedPlaceholdersFound > 0 && quotedReplacements === 0) {
+          const errorMsg = `MUSTRUN FAILED: Template has ${quotedPlaceholdersFound} quoted placeholders but ZERO were replaced. Cannot proceed with {{}} fallback mode.`;
+          console.error(`[TRIAGE-v3.0] ❌ ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+        
+        // Commit changes back to zip if replacements were made
+        if (quotedReplacementsTotal > 0) {
+          console.log(`[TRIAGE-v3.0] Committing ${quotedReplacementsTotal} replacements back to zip...`);
+          zip.file("word/document.xml", xmlContent);
+          
+          // Also process header and footer if they exist
+          if (headerXml) {
+            let headerContent = headerXml.asText();
+            const headerBefore = headerContent.length;
+            for (const mapping of quotedPlaceholderMappings) {
+              const clientValue = clientData[mapping.field];
+              if (clientValue && headerContent.includes(mapping.search)) {
+                headerContent = headerContent.replace(new RegExp(escapeRegExp(mapping.search), 'g'), String(clientValue));
+              }
+            }
+            if (headerContent.length !== headerBefore) {
+              zip.file("word/header1.xml", headerContent);
+              console.log(`[TRIAGE-v3.0] ✅ Updated header`);
+            }
+          }
+          
+          if (footerXml) {
+            let footerContent = footerXml.asText();
+            const footerBefore = footerContent.length;
+            for (const mapping of quotedPlaceholderMappings) {
+              const clientValue = clientData[mapping.field];
+              if (clientValue && footerContent.includes(mapping.search)) {
+                footerContent = footerContent.replace(new RegExp(escapeRegExp(mapping.search), 'g'), String(clientValue));
+              }
+            }
+            if (footerContent.length !== footerBefore) {
+              zip.file("word/footer1.xml", footerContent);
+              console.log(`[TRIAGE-v3.0] ✅ Updated footer`);
+            }
+          }
+          
+          console.log(`[TRIAGE-v3.0] ✅ All changes committed to zip`);
+        }
+        
+      } catch (xmlError) {
+        console.error("[TRIAGE-v3.0] ❌ CRITICAL ERROR in XML processing:", xmlError);
+        throw xmlError; // Re-throw to prevent silent failure
+      }
+      
+      // MUSTRUN: Construct Docxtemplater with the modified zip
+      console.log("[FINAL-CHECK] About to construct Docxtemplater...");
+      console.log("[FINAL-CHECK] Quoted replacements made:", quotedReplacementsTotal);
       const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
         errorLogging: true,
       });
+      console.log("[FINAL-CHECK] Docxtemplater instance created successfully");
+      console.log("[FINAL-CHECK] This log MUST appear if code executes!");
 
       // Prepare data for template - flatten nested objects and ensure all values are strings
       const templateData: Record<string, string> = {};
@@ -280,8 +527,15 @@ export const documentGenerator = {
 
       if (!dataWasFilled) {
         console.log("⚠️ No data was filled by docxtemplater - template may have no placeholders");
-        console.log("🔄 Attempting smart text replacement fallback...");
-        return await this.fillWordDocumentWithSmartReplacement(templateBuffer, clientData);
+        
+        // Try AI-identified insertion points first if available
+        if (template && template.insertionPoints && template.insertionPoints.length > 0) {
+          console.log("🎯 Using AI-identified insertion points for data placement...");
+          return await this.fillWordDocumentWithAIInsertionPoints(templateBuffer, clientData, template.insertionPoints);
+        } else {
+          console.log("🔄 Attempting smart text replacement fallback...");
+          return await this.fillWordDocumentWithSmartReplacement(templateBuffer, clientData);
+        }
       }
 
       // Generate the filled document
@@ -587,7 +841,7 @@ export const documentGenerator = {
 
   async fillWordDocumentWithSmartReplacement(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer> {
     try {
-      console.log("=== SMART TEXT REPLACEMENT APPROACH ===");
+      console.log("=== SMART TEXT REPLACEMENT APPROACH (FIXED FOR QUOTED PLACEHOLDERS) ===");
       
       const PizZip = require('pizzip');
       const zip = new PizZip(templateBuffer);
@@ -602,9 +856,25 @@ export const documentGenerator = {
       let xmlContent = documentXml.asText();
       console.log("Original document XML length:", xmlContent.length);
       
-      // Define replacement patterns - these are common patterns in legal documents
+      // Define replacement patterns - UPDATED to match actual template syntax
       const replacementPatterns = [
-        // Name patterns
+        // QUOTED PLACEHOLDER PATTERNS (actual template syntax)
+        { pattern: /" Grantor's name"/gi, field: 'fullName', description: 'Grantor name in quotes' },
+        { pattern: /" Name"/gi, field: 'fullName', description: 'Name in quotes' },
+        { pattern: /"Grantor's name"/gi, field: 'fullName', description: 'Grantor name in quotes (no space)' },
+        { pattern: /" Identify Successor trustees"/gi, field: 'trusteeName', description: 'Successor trustees in quotes' },
+        { pattern: /"Identify Successor trustees"/gi, field: 'trusteeName', description: 'Successor trustees in quotes (no space)' },
+        { pattern: /" Successor Co-Trustee's name"/gi, field: 'trusteeName', description: 'Co-Trustee name in quotes' },
+        { pattern: /"Successor Co-Trustee's name"/gi, field: 'trusteeName', description: 'Co-Trustee name in quotes (no space)' },
+        { pattern: /" Date of Birth"/gi, field: 'documentDate', description: 'Date of birth in quotes' },
+        { pattern: /"Date of Birth"/gi, field: 'documentDate', description: 'Date of birth in quotes (no space)' },
+        { pattern: /" Legal Description of the property\/ies"/gi, field: 'propertyAddress', description: 'Property description in quotes' },
+        { pattern: /"Legal Description of the property\/ies"/gi, field: 'propertyAddress', description: 'Property description in quotes (no space)' },
+        
+        // UNDERSCORE PATTERNS (for blank filling)
+        { pattern: /__{10,}/g, field: 'fullName', description: 'Long underscores for names' },
+        
+        // TRADITIONAL PATTERNS (keep as fallback)
         { pattern: /NAME:\s*_+/gi, field: 'fullName', description: 'Name field with underlines' },
         { pattern: /Name:\s*_+/g, field: 'fullName', description: 'Name field with underlines' },
         { pattern: /\[NAME\]/gi, field: 'fullName', description: 'Name in brackets' },
@@ -666,10 +936,49 @@ export const documentGenerator = {
       }
       
       if (replacementsMade === 0) {
-        console.log("⚠️ No text patterns found to replace. Template may need manual placeholders.");
-        console.log("📝 Consider adding placeholders like {{fullName}}, {{email}}, etc. to your template");
+        console.log("⚠️ Standard patterns not found. Trying EXACT template placeholders...");
         
-        // Try some generic replacements for common static text
+        // Try EXACT template placeholders found in the actual document - ENHANCED for Certificate of Trust
+        const exactTemplatePlaceholders = [
+          // Certificate of Trust specific placeholders
+          { search: '"Trust\'s name"', replace: clientData.trust_name || clientData.trustName || clientData.name || '"Trust Name Not Provided"' },
+          { search: '"Grantor\'s name"', replace: clientData.grantor_names || clientData.grantorName || clientData.fullName || '"Grantor Not Provided"' },
+          { search: '" Grantor\'s name"', replace: clientData.grantor_names || clientData.grantorName || clientData.fullName || '"Grantor Not Provided"' },
+          { search: '"Grantor\'s name or names in case of multiple grantors"', replace: clientData.grantor_names || clientData.grantorName || clientData.fullName || '"Grantor Not Provided"' },
+          { search: '"Name of Grantor"', replace: clientData.grantor_names || clientData.grantorName || clientData.fullName || '"Grantor Not Provided"' },
+          { search: '"Identify Successor trustees"', replace: clientData.successor_trustees || clientData.successorTrustees || '"Successor Trustee Not Provided"' },
+          { search: '" Identify Successor trustees"', replace: clientData.successor_trustees || clientData.successorTrustees || '"Successor Trustee Not Provided"' },
+          { search: '"Successor Co-Trustee\'s name"', replace: clientData.successor_co_trustees || clientData.coTrusteeName || '"Co-Trustee Not Provided"' },
+          { search: '" Successor Co-Trustee\'s name"', replace: clientData.successor_co_trustees || clientData.coTrusteeName || '"Co-Trustee Not Provided"' },
+          { search: '"current trustees"', replace: clientData.current_trustees || clientData.trusteeName || '"Current Trustee Not Provided"' },
+          { search: '"notary public name"', replace: clientData.notary_public_name || clientData.notaryName || '"Notary Not Provided"' },
+          { search: '"county"', replace: clientData.county || '"County Not Provided"' },
+          { search: '"execution day"', replace: clientData.execution_day || '"Day Not Provided"' },
+          { search: '"execution month"', replace: clientData.execution_month || '"Month Not Provided"' },
+          { search: '"execution year"', replace: clientData.execution_year || '"Year Not Provided"' },
+          { search: '"notary commission expires"', replace: clientData.notary_commission_expires || '"Date Not Provided"' },
+          { search: '"signature authority"', replace: clientData.signature_authority || '"Authority Not Provided"' },
+          // Legacy placeholders
+          { search: '" Date of Birth"', replace: clientData.documentDate || new Date().toLocaleDateString() },
+          { search: '"Date of Birth"', replace: clientData.documentDate || new Date().toLocaleDateString() },
+          { search: '" Legal Description of the property/ies"', replace: clientData.propertyAddress || '"Property Address Not Provided"' },
+          { search: '"Legal Description of the property/ies"', replace: clientData.propertyAddress || '"Property Address Not Provided"' },
+        ];
+        
+        console.log("🎯 Trying exact template placeholder replacement...");
+        for (const replacement of exactTemplatePlaceholders) {
+          if (xmlContent.includes(replacement.search)) {
+            const beforeCount = (xmlContent.match(new RegExp(replacement.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+            xmlContent = xmlContent.replace(new RegExp(replacement.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacement.replace);
+            const afterCount = (xmlContent.match(new RegExp(replacement.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+            if (beforeCount > afterCount) {
+              replacementsMade += (beforeCount - afterCount);
+              console.log(`✅ EXACT replacement: "${replacement.search}" → "${replacement.replace}" (${beforeCount - afterCount} times)`);
+            }
+          }
+        }
+        
+        // Also try some generic replacements for common static text
         const genericReplacements = [
           { search: "Client Name", replace: clientData.fullName || "Client Name" },
           { search: "CLIENT NAME", replace: (clientData.fullName || "CLIENT NAME").toUpperCase() },
@@ -691,21 +1000,26 @@ export const documentGenerator = {
       console.log(`📊 Total replacements made: ${replacementsMade}`);
       
       if (replacementsMade > 0) {
-        // Update the document XML in the zip
-        zip.files["word/document.xml"] = {
-          ...documentXml,
-          asText: () => xmlContent,
-          asBinary: () => xmlContent
-        };
+        console.log(`🔧 UPDATING DOCUMENT XML WITH ${replacementsMade} REPLACEMENTS...`);
         
-        // Generate updated document
-        const updatedBuffer = zip.generate({
-          type: 'nodebuffer',
-          compression: 'DEFLATE',
-        });
-        
-        console.log("✅ Smart text replacement completed successfully");
-        return updatedBuffer;
+        // FIXED: Update the document XML in the zip properly  
+        try {
+          zip.file("word/document.xml", xmlContent);
+          console.log(`✅ Document XML file updated successfully`);
+          
+          // Generate updated document
+          const updatedBuffer = zip.generate({
+            type: 'nodebuffer',
+            compression: 'DEFLATE',
+          });
+          
+          console.log(`✅ Generated updated document buffer (${updatedBuffer.length} bytes)`);
+          console.log("✅ Smart text replacement completed successfully");
+          return updatedBuffer;
+        } catch (bufferError) {
+          console.error("❌ Error generating updated document buffer:", bufferError);
+          throw bufferError;
+        }
       } else {
         console.log("❌ No replacements made, returning original document");
         return templateBuffer;
@@ -716,4 +1030,338 @@ export const documentGenerator = {
       return templateBuffer;
     }
   },
+
+  async fillWordDocumentWithAIInsertionPoints(templateBuffer: Buffer, clientData: Record<string, any>, insertionPoints: any[]): Promise<Buffer> {
+    try {
+      console.log("=== AI INSERTION POINTS APPROACH ===");
+      console.log(`🎯 Using ${insertionPoints.length} AI-identified insertion points`);
+      console.log(`🔍 CLIENT DATA DEBUG:`, JSON.stringify(clientData, null, 2));
+      console.log(`🔍 CLIENT DATA KEYS:`, Object.keys(clientData));
+      console.log(`🔍 INSERTION POINTS:`, insertionPoints.map(p => ({ field: p.fieldName, desc: p.description })));
+      
+      const PizZip = require('pizzip');
+      const zip = new PizZip(templateBuffer);
+      
+      // Get the main document XML
+      const documentXml = zip.files["word/document.xml"];
+      if (!documentXml) {
+        console.log("Could not find document.xml, falling back to smart replacement");
+        return await this.fillWordDocumentWithSmartReplacement(templateBuffer, clientData);
+      }
+      
+      let xmlContent = documentXml.asText();
+      console.log("Original document XML length:", xmlContent.length);
+      
+      let replacementsMade = 0;
+      
+      // Apply AI-identified insertion points
+      for (const point of insertionPoints) {
+        const { fieldName, contextBefore, contextAfter, placeholder, description } = point;
+        
+        console.log(`\n🎯 PROCESSING INSERTION POINT:`, {
+          fieldName,
+          description,
+          placeholder: placeholder?.substring(0, 50) + (placeholder?.length > 50 ? '...' : ''),
+          contextBefore: contextBefore?.substring(0, 30) + (contextBefore?.length > 30 ? '...' : ''),
+          contextAfter: contextAfter?.substring(0, 30) + (contextAfter?.length > 30 ? '...' : '')
+        });
+        
+        // Try direct field name first
+        let clientValue = clientData[fieldName];
+        console.log(`🔍 Direct lookup for "${fieldName}": ${clientValue ? `FOUND: "${clientValue}"` : 'NOT FOUND'}`);
+        
+        // If not found, try smart field mapping
+        if (!clientValue) {
+          console.log(`🔧 Calling smart field mapping for: ${fieldName}`);
+          clientValue = this.findSmartFieldMapping(fieldName, clientData);
+          console.log(`🔧 Smart mapping result: ${clientValue ? `FOUND: "${clientValue}"` : 'NOT FOUND'}`);
+        }
+        
+        // CRITICAL DEBUG: Log what value we're about to use
+        if (clientValue) {
+          console.log(`✅ WILL USE VALUE: "${clientValue}" for field: ${fieldName}`);
+        } else {
+          console.log(`❌ NO VALUE AVAILABLE for field: ${fieldName} - SKIPPING`);
+          continue;
+        }
+        
+        console.log(`🔍 Processing insertion point: ${description}`);
+        
+        let replacementMade = false;
+        
+        // Strategy 1: Use the exact placeholder if found
+        if (placeholder && xmlContent.includes(placeholder)) {
+          xmlContent = xmlContent.replace(new RegExp(escapeRegExp(placeholder), 'g'), String(clientValue));
+          replacementsMade++;
+          replacementMade = true;
+          console.log(`✅ Replaced placeholder "${placeholder}" with "${clientValue}"`);
+        }
+        
+        // Strategy 1.5: Try quoted placeholder patterns specifically
+        if (!replacementMade && fieldName) {
+          const quotedPatterns = [
+            `"${fieldName}"`,
+            `"${fieldName.replace('_', ' ')}"`
+          ];
+          
+          for (const quotedPattern of quotedPatterns) {
+            if (xmlContent.includes(quotedPattern)) {
+              xmlContent = xmlContent.replace(new RegExp(escapeRegExp(quotedPattern), 'g'), String(clientValue));
+              replacementsMade++;
+              replacementMade = true;
+              console.log(`✅ Replaced quoted pattern "${quotedPattern}" with "${clientValue}"`);
+              break;
+            }
+          }
+        }
+        
+        // Strategy 2: Use context-based replacement
+        if (!replacementMade && contextBefore && contextAfter) {
+          const pattern = new RegExp(escapeRegExp(contextBefore) + '(.*?)' + escapeRegExp(contextAfter), 'gs');
+          const matches = xmlContent.match(pattern);
+          
+          if (matches && matches.length > 0) {
+            xmlContent = xmlContent.replace(pattern, `${contextBefore}${clientValue}${contextAfter}`);
+            replacementsMade++;
+            replacementMade = true;
+            console.log(`✅ Replaced using context: "${contextBefore}...${contextAfter}" with "${clientValue}"`);
+          }
+        }
+        
+        // Strategy 3: Field name-based search
+        if (!replacementMade) {
+          // Look for common patterns for this field type
+          const fieldPatterns = this.getFieldPatterns(fieldName);
+          for (const pattern of fieldPatterns) {
+            if (xmlContent.match(pattern)) {
+              xmlContent = xmlContent.replace(pattern, String(clientValue));
+              replacementsMade++;
+              replacementMade = true;
+              console.log(`✅ Replaced using field pattern for "${fieldName}" with "${clientValue}"`);
+              break;
+            }
+          }
+        }
+        
+        if (!replacementMade) {
+          console.log(`⚠️ Could not find insertion point for: ${fieldName} - ${description}`);
+        }
+      }
+      
+      console.log(`📊 Total AI-guided replacements made: ${replacementsMade}`);
+      
+      if (replacementsMade > 0) {
+        console.log(`🔧 UPDATING DOCUMENT XML WITH ${replacementsMade} REPLACEMENTS...`);
+        console.log(`🔧 Updated XML content length: ${xmlContent.length}`);
+        
+        // FIXED: Update the document XML in the zip properly
+        try {
+          // Create new PizZip instance and update the document.xml file
+          zip.file("word/document.xml", xmlContent);
+          
+          console.log(`✅ Document XML file updated successfully`);
+          
+          // Generate updated document buffer
+          const updatedBuffer = zip.generate({
+            type: 'nodebuffer',
+            compression: 'DEFLATE',
+          });
+          
+          console.log(`✅ Generated updated document buffer (${updatedBuffer.length} bytes)`);
+          console.log("✅ AI insertion points processing completed successfully");
+          return updatedBuffer;
+        } catch (bufferError) {
+          console.error("❌ Error generating updated document buffer:", bufferError);
+          throw bufferError;
+        }
+      } else {
+        console.log("❌ No AI replacements made, falling back to smart replacement");
+        return await this.fillWordDocumentWithSmartReplacement(templateBuffer, clientData);
+      }
+      
+    } catch (error) {
+      console.error("Error in AI insertion points processing:", error);
+      console.log("🔄 Falling back to smart replacement...");
+      return await this.fillWordDocumentWithSmartReplacement(templateBuffer, clientData);
+    }
+  },
+
+  getFieldPatterns(fieldName: string): RegExp[] {
+    // Return common patterns for different field types
+    const patterns: RegExp[] = [];
+    
+    switch (fieldName.toLowerCase()) {
+      case 'fullname':
+      case 'clientname':
+      case 'name':
+        patterns.push(
+          /\[NAME\]/gi,
+          /\[CLIENT NAME\]/gi,
+          /\[FULL NAME\]/gi,
+          /NAME:\s*_+/gi,
+          /Name:\s*_+/g
+        );
+        break;
+      case 'email':
+        patterns.push(
+          /\[EMAIL\]/gi,
+          /\[EMAIL ADDRESS\]/gi,
+          /EMAIL:\s*_+/gi,
+          /Email:\s*_+/g
+        );
+        break;
+      case 'phone':
+        patterns.push(
+          /\[PHONE\]/gi,
+          /\[PHONE NUMBER\]/gi,
+          /PHONE:\s*_+/gi,
+          /Phone:\s*_+/g
+        );
+        break;
+      case 'documentdate':
+      case 'date':
+        patterns.push(
+          /\[DATE\]/gi,
+          /\[DOCUMENT DATE\]/gi,
+          /DATE:\s*_+/gi,
+          /Date:\s*_+/g
+        );
+        break;
+      case 'propertyaddress':
+      case 'address':
+        patterns.push(
+          /\[ADDRESS\]/gi,
+          /\[PROPERTY ADDRESS\]/gi,
+          /ADDRESS:\s*_+/gi,
+          /Address:\s*_+/g
+        );
+        break;
+      default:
+        // Generic patterns for any field
+        patterns.push(
+          new RegExp(`\\[${fieldName.toUpperCase()}\\]`, 'gi'),
+          new RegExp(`${fieldName.toUpperCase()}:\\s*_+`, 'gi')
+        );
+    }
+    
+    return patterns;
+  },
+
+  findSmartFieldMapping(templateFieldName: string, clientData: Record<string, any>): string | null {
+    console.log(`\n🔍 === SMART FIELD MAPPING DEBUG ===`);
+    console.log(`🔍 Template field: "${templateFieldName}"`);
+    console.log(`🔍 Available client data:`, JSON.stringify(clientData, null, 2));
+    console.log(`🔍 Available client data keys:`, Object.keys(clientData));
+    
+    // Define field mapping rules - EXPANDED with all possible AI field names AND quoted placeholders
+    const fieldMappings: Record<string, string[]> = {
+      // Grantor/Person fields
+      'grantorName': ['fullName', 'grantorName', 'firstName', 'lastName', 'name', 'clientName', 'grantor_names'],
+      'grantor': ['fullName', 'grantorName', 'firstName', 'lastName', 'name', 'clientName', 'grantor_names'],
+      'grantorAddress': ['address', 'propertyAddress', 'streetAddress', 'grantorAddress'],
+      'grantorDOB': ['dateOfBirth', 'birthDate', 'dob', 'documentDate'],
+      'grantorSignatureDate': ['documentDate', 'signatureDate', 'date'],
+      
+      // CRITICAL: Quoted placeholder mappings for Certificate of Trust
+      "Trust's name": ['trust_name', 'trustName', 'name', 'fullName'],
+      "Grantor's name": ['grantor_names', 'grantorName', 'fullName', 'name'],
+      "Grantor's name or names in case of multiple grantors": ['grantor_names', 'grantorName', 'fullName'],
+      "Name of Grantor": ['grantor_names', 'grantorName', 'fullName', 'name'],
+      
+      // Trust fields (CRITICAL - these are the ones being processed!)
+      'trustName': ['trustName', 'name', 'fullName', 'companyName', 'trust_name'],
+      'trustDate': ['documentDate', 'trustDate', 'date'],
+      'initialTrusteeName': ['trusteeName', 'trustee', 'fullName', 'initialTrusteeName', 'current_trustees'],
+      'successorTrustees': ['trusteeName', 'trustee', 'fullName', 'successorTrustees', 'successor_trustees'],
+      'coTrusteeName': ['trusteeName', 'trustee', 'fullName', 'coTrusteeName', 'successor_co_trustees'],
+      'coTrusteeAddress': ['address', 'propertyAddress', 'streetAddress', 'coTrusteeAddress'],
+      'coTrusteeDL': ['phone', 'driverLicense', 'coTrusteeDL'],
+      'successorCoTrusteeName': ['trusteeName', 'trustee', 'fullName', 'successorCoTrusteeName', 'successor_co_trustees'], // IMPORTANT!
+      
+      // Trust-specific field mappings
+      'trust_name': ['trust_name', 'trustName', 'name', 'fullName'],
+      'grantor_names': ['grantor_names', 'grantorName', 'fullName', 'name'],
+      'current_trustees': ['current_trustees', 'trusteeName', 'trustee', 'fullName'],
+      'successor_trustees': ['successor_trustees', 'successorTrustees', 'trusteeName'],
+      'successor_co_trustees': ['successor_co_trustees', 'successorCoTrusteeName', 'coTrusteeName'],
+      'execution_day': ['execution_day', 'day', 'documentDay'],
+      'execution_month': ['execution_month', 'month', 'documentMonth'],
+      'execution_year': ['execution_year', 'year', 'documentYear'],
+      'notary_public_name': ['notary_public_name', 'notaryName', 'notary', 'fullName'],
+      'notary_commission_expires': ['notary_commission_expires', 'notaryDate', 'expirationDate'],
+      
+      // Business fields
+      'businessName': ['company', 'businessName', 'companyName'],
+      'company': ['company', 'businessName', 'companyName'],
+      
+      // Contact fields
+      'email': ['email', 'emailAddress', 'contactEmail'],
+      'phone': ['phone', 'phoneNumber', 'telephone'],
+      'address': ['address', 'propertyAddress', 'streetAddress'],
+      
+      // Property fields
+      'propertyAddress': ['propertyAddress', 'address', 'streetAddress'],
+      'legalDescription': ['legalDescription', 'propertyDescription', 'propertyAddress'],
+      
+      // Document fields
+      'documentDate': ['documentDate', 'date', 'signatureDate'],
+      'notaryDate': ['documentDate', 'date', 'notaryDate'],
+      'witnessName': ['witnessName', 'witness', 'fullName'],
+      'notaryName': ['notaryName', 'notary', 'fullName'],
+      'notaryCounty': ['county', 'notaryCounty', 'state'],
+      
+      // Beneficiary fields
+      'minorBeneficiaries': ['beneficiaries', 'minorBeneficiaries'],
+      'beneficiaries': ['beneficiaries', 'minorBeneficiaries'],
+      
+      // Other common fields
+      'state': ['state', 'stateProvince', 'incorporationState'],
+      'county': ['county', 'notaryCounty'],
+      'bondRequirement': ['bondRequirement', 'additionalNotes'],
+      'trustPropertyTitling': ['trustPropertyTitling', 'propertyAddress'],
+      'propertyDivision': ['propertyDivision', 'additionalNotes'],
+      'signature_authority': ['signature_authority', 'signatureAuthority', 'authority']
+    };
+    
+    // Try exact field name first (case insensitive)
+    for (const [clientKey, clientValue] of Object.entries(clientData)) {
+      if (clientKey.toLowerCase() === templateFieldName.toLowerCase() && clientValue) {
+        console.log(`✅ Found exact match: ${templateFieldName} → ${clientKey} = "${clientValue}"`);
+        return String(clientValue);
+      }
+    }
+    
+    // Try mapped field names
+    const possibleMatches = fieldMappings[templateFieldName] || [];
+    console.log(`🔧 Checking ${possibleMatches.length} possible matches for "${templateFieldName}":`, possibleMatches);
+    
+    for (const possibleField of possibleMatches) {
+      console.log(`   🔍 Trying possible field: "${possibleField}"`);
+      for (const [clientKey, clientValue] of Object.entries(clientData)) {
+        if (clientKey.toLowerCase() === possibleField.toLowerCase() && clientValue) {
+          console.log(`✅ Found mapped match: ${templateFieldName} → ${possibleField} → ${clientKey} = "${clientValue}"`);
+          return String(clientValue);
+        }
+      }
+    }
+    
+    // Try partial matching (contains)
+    for (const [clientKey, clientValue] of Object.entries(clientData)) {
+      if (clientValue && (
+        clientKey.toLowerCase().includes(templateFieldName.toLowerCase()) ||
+        templateFieldName.toLowerCase().includes(clientKey.toLowerCase())
+      )) {
+        console.log(`✅ Found partial match: ${templateFieldName} → ${clientKey} = "${clientValue}"`);
+        return String(clientValue);
+      }
+    }
+    
+    console.log(`❌ No smart mapping found for: ${templateFieldName}`);
+    return null;
+  },
 };
+
+// Helper function to escape regex special characters
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

@@ -38,17 +38,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.templateParser = void 0;
 const admin = __importStar(require("firebase-admin"));
+const functions = __importStar(require("firebase-functions"));
 const openai_1 = require("openai");
 const pdf_parse_1 = __importDefault(require("pdf-parse"));
 const mammoth = __importStar(require("mammoth"));
 const uuid_1 = require("uuid");
 // Initialize OpenAI with secret
 const getOpenAIClient = () => {
-    const apiKey = process.env.OPENAI_API_KEY;
+    var _a;
+    // Try environment variable first, then Firebase config
+    let apiKey = process.env.OPENAI_API_KEY || ((_a = functions.config().openai) === null || _a === void 0 ? void 0 : _a.api_key);
     console.log('🔑 Checking OpenAI API key availability:', apiKey ? 'Found' : 'Missing');
     if (!apiKey) {
-        throw new Error("OpenAI API key not found in environment variables");
+        throw new Error("OpenAI API key not found in environment variables or Firebase config");
     }
+    // Clean the API key - remove any whitespace, newlines, or extra characters
+    apiKey = apiKey.trim().replace(/\s+/g, '');
+    console.log('🧹 Cleaned API key length:', apiKey.length);
     if (!apiKey.startsWith('sk-')) {
         throw new Error("Invalid OpenAI API key format");
     }
@@ -132,36 +138,49 @@ exports.templateParser = {
     async onTemplateUploaded(object) {
         var _a;
         try {
+            console.log('📁 Template upload triggered:', object.name);
             const filePath = object.name;
             if (!filePath || !filePath.startsWith("templates/")) {
+                console.log('⏭️ Skipping non-template file:', filePath);
                 return;
             }
             const templateId = filePath.split("/")[1];
             if (!templateId) {
+                console.log('❌ Could not extract template ID from path:', filePath);
                 return;
             }
+            console.log('🚀 Processing template:', templateId);
             // Update status to parsing
             await db.collection("templates").doc(templateId).update({
                 status: "parsing",
                 updatedAt: new Date(),
             });
+            console.log('📊 Template status updated to parsing');
             // Download and parse the file
+            console.log('📥 Downloading file from storage...');
             const file = storage.bucket().file(filePath);
             const [fileBuffer] = await file.download();
+            console.log('✅ File downloaded, size:', fileBuffer.length, 'bytes');
             let extractedText = "";
             const fileExtension = (_a = filePath.split(".").pop()) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+            console.log('📄 File extension:', fileExtension);
             if (fileExtension === "pdf") {
+                console.log('📄 Parsing PDF file...');
                 const pdfData = await (0, pdf_parse_1.default)(fileBuffer);
                 extractedText = pdfData.text;
             }
             else if (fileExtension === "docx") {
+                console.log('📄 Parsing DOCX file...');
                 const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
                 extractedText = docxData.value;
             }
             else {
                 throw new Error("Unsupported file type");
             }
+            console.log('📝 Extracted text length:', extractedText.length, 'characters');
+            console.log('📝 Text preview:', extractedText.substring(0, 100) + '...');
             // Extract fields using OpenAI
+            console.log('🤖 Starting AI field extraction...');
             const extractedFields = await this.extractFieldsWithAI(extractedText);
             // Update template with extracted fields
             await db.collection("templates").doc(templateId).update({
@@ -197,6 +216,14 @@ exports.templateParser = {
             }
             console.log('🔑 Getting OpenAI client...');
             const openaiClient = getOpenAIClient();
+            // First, extract the field requirements AND identify insertion points
+            const insertionPoints = await this.identifyInsertionPoints(text, openaiClient);
+            console.log('🎯 Identified insertion points:', insertionPoints);
+            // Store insertion points for later use in document generation
+            if (insertionPoints && insertionPoints.length > 0) {
+                // We'll return these with the form fields so they can be stored in the template
+                console.log('💾 Will store insertion points with template for AI document generation');
+            }
             // Define JSON Schema for structured output
             const responseSchema = {
                 type: "object",
@@ -538,19 +565,20 @@ ${text.substring(0, 6000)}`
                 throw new Error("Unsupported file type");
             }
             console.log('📄 Extracted text length:', extractedText.length);
-            // Extract fields using OpenAI with Structured Outputs
-            const extractedFields = await exports.templateParser.extractFieldsWithAI(extractedText);
-            // Update template with extracted fields
+            // Extract fields and insertion points using OpenAI
+            const result = await exports.templateParser.extractFieldsAndInsertionPoints(extractedText);
+            // Update template with extracted fields and insertion points
             await db.collection("templates").doc(templateId).update({
-                extractedFields,
+                extractedFields: result.fields,
+                insertionPoints: result.insertionPoints,
                 status: "parsed",
                 parsedAt: new Date(),
                 updatedAt: new Date(),
             });
-            console.log(`✅ Successfully processed template ${templateId} with ${extractedFields.length} fields`);
+            console.log(`✅ Successfully processed template ${templateId} with ${result.fields.length} fields and ${result.insertionPoints.length} insertion points`);
             return {
                 success: true,
-                data: { message: `Template processed successfully with ${extractedFields.length} fields` },
+                data: { message: `Template processed successfully with ${result.fields.length} fields and ${result.insertionPoints.length} insertion points` },
             };
         }
         catch (error) {
@@ -567,6 +595,89 @@ ${text.substring(0, 6000)}`
                 success: false,
                 error: `Failed to process template: ${error.message}`
             };
+        }
+    },
+    async identifyInsertionPoints(text, openaiClient) {
+        var _a, _b, _c;
+        try {
+            console.log('🎯 Using AI to identify data insertion points in document...');
+            const response = await openaiClient.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are an expert at analyzing legal documents and identifying specific locations where client data should be inserted.
+
+Your task is to:
+1. Find exact text patterns where data should be replaced
+2. Identify the type of data needed for each location
+3. Provide the surrounding context for precise matching
+
+Return a JSON array of insertion points with this structure:
+{
+  "insertionPoints": [
+    {
+      "fieldName": "clientName", 
+      "dataType": "text",
+      "contextBefore": "exact text before insertion point",
+      "contextAfter": "exact text after insertion point", 
+      "placeholder": "the text to be replaced",
+      "description": "what this insertion point is for"
+    }
+  ]
+}
+
+Look for patterns like:
+- Blank lines or underscores: "Name: _______" 
+- Placeholder text: "CLIENT NAME", "[INSERT NAME]"
+- Repeated generic terms: "John Doe", "Company Name", "123 Main St"
+- Form-like patterns: "Date: ______", "Phone: _______"
+- Legal document blanks: gaps in text where information should go`
+                    },
+                    {
+                        role: "user",
+                        content: `Analyze this document text and identify ALL locations where client data should be inserted. Be very specific about the exact text patterns:
+
+${text}`
+                    }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.1,
+                max_tokens: 3000
+            });
+            const content = (_b = (_a = response.choices[0]) === null || _a === void 0 ? void 0 : _a.message) === null || _b === void 0 ? void 0 : _b.content;
+            if (!content) {
+                throw new Error('No response from OpenAI');
+            }
+            const result = JSON.parse(content);
+            console.log('✅ AI identified insertion points:', ((_c = result.insertionPoints) === null || _c === void 0 ? void 0 : _c.length) || 0);
+            return result.insertionPoints || [];
+        }
+        catch (error) {
+            console.error('❌ Error identifying insertion points:', error);
+            return [];
+        }
+    },
+    async extractFieldsAndInsertionPoints(text) {
+        try {
+            console.log('🤖 Starting combined AI extraction: fields + insertion points...');
+            if (!text || text.trim().length === 0) {
+                throw new Error('No text content to analyze');
+            }
+            const openaiClient = getOpenAIClient();
+            // Get both field requirements and insertion points
+            const [fields, insertionPoints] = await Promise.all([
+                this.extractFieldsWithAI(text),
+                this.identifyInsertionPoints(text, openaiClient)
+            ]);
+            console.log(`✅ Extracted ${fields.length} fields and ${insertionPoints.length} insertion points`);
+            return { fields, insertionPoints };
+        }
+        catch (error) {
+            console.error('❌ Error in combined extraction:', error);
+            // Return fallback data
+            const fallbackFields = this.createIntelligentFallbackFields(text);
+            return { fields: fallbackFields, insertionPoints: [] };
         }
     },
 };

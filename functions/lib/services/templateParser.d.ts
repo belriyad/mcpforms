@@ -19,5 +19,10 @@ export declare const templateParser: {
     }): Promise<ApiResponse<{
         message: string;
     }>>;
+    identifyInsertionPoints(text: string, openaiClient: any): Promise<any[]>;
+    extractFieldsAndInsertionPoints(text: string): Promise<{
+        fields: FormField[];
+        insertionPoints: any[];
+    }>;
 };
 //# sourceMappingURL=templateParser.d.ts.map

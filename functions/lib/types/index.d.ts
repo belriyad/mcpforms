@@ -5,11 +5,20 @@ export interface Template {
     fileUrl: string;
     fileType: "pdf" | "docx";
     extractedFields: FormField[];
+    insertionPoints?: InsertionPoint[];
     status: "uploaded" | "parsing" | "parsed" | "error";
     createdAt: Date;
     updatedAt: Date;
     parsedAt?: Date;
     errorMessage?: string;
+}
+export interface InsertionPoint {
+    fieldName: string;
+    dataType: string;
+    contextBefore: string;
+    contextAfter: string;
+    placeholder: string;
+    description: string;
 }
 export interface FormField {
     id: string;

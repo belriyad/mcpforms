@@ -7,7 +7,7 @@ export declare const documentGenerator: {
         artifactIds: string[];
     }>>;
     generateDocumentFromTemplate(template: Template, intake: Intake): Promise<string>;
-    fillWordDocument(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer>;
+    fillWordDocument(templateBuffer: Buffer, clientData: Record<string, any>, template?: any): Promise<Buffer>;
     fillWordDocumentSimple(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer>;
     fillPdfDocument(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer>;
     getDownloadUrl(data: {
@@ -22,5 +22,8 @@ export declare const documentGenerator: {
     }>>;
     deleteExistingArtifacts(intakeId: string): Promise<void>;
     fillWordDocumentWithSmartReplacement(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer>;
+    fillWordDocumentWithAIInsertionPoints(templateBuffer: Buffer, clientData: Record<string, any>, insertionPoints: any[]): Promise<Buffer>;
+    getFieldPatterns(fieldName: string): RegExp[];
+    findSmartFieldMapping(templateFieldName: string, clientData: Record<string, any>): string | null;
 };
 //# sourceMappingURL=documentGenerator.d.ts.map
