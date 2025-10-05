@@ -10,7 +10,8 @@ import { documentGeneratorAI } from "./services/documentGeneratorAI";
 import * as templateEditorAPI from "./services/templateEditorAPI";
 import * as intakeCustomizationAPI from "./services/intakeCustomizationAPI";
 
-
+// Initialize Firestore
+const db = admin.firestore();
 
 // Template Upload and AI Parsing
 export const uploadTemplateAndParse = functions
@@ -93,6 +94,171 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use("/", intakeManager.intakeFormAPI);
 export const intakeFormAPI = functions.https.onRequest(app);
+
+// List intakes with optional status filter
+export const listIntakes = functions.https.onCall(async (data, context) => {
+  try {
+    const { status } = data;
+    
+    console.log(`📋 Listing intakes${status ? ` with status: ${status}` : ''}`);
+    
+    let intakesQuery = db.collection("intakes");
+    
+    if (status) {
+      intakesQuery = intakesQuery.where("status", "==", status) as any;
+    }
+    
+    const snapshot = await intakesQuery.orderBy("submittedAt", "desc").get();
+    
+    const intakes = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        submittedAt: data.submittedAt,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      };
+    });
+    
+    console.log(`✅ Found ${intakes.length} intakes`);
+    
+    return {
+      success: true,
+      data: intakes,
+    };
+  } catch (error) {
+    console.error("Error listing intakes:", error);
+    return {
+      success: false,
+      error: `Failed to list intakes: ${(error as Error).message}`,
+    };
+  }
+});
+
+// Approve customization
+export const approveCustomization = functions.https.onCall(async (data, context) => {
+  try {
+    const { intakeId } = data;
+    
+    if (!intakeId) {
+      return { success: false, error: "Missing intakeId" };
+    }
+    
+    console.log(`✅ Approving customization for intake: ${intakeId}`);
+    
+    const intakeRef = db.collection("intakes").doc(intakeId);
+    const intakeDoc = await intakeRef.get();
+    
+    if (!intakeDoc.exists) {
+      return { success: false, error: "Intake not found" };
+    }
+    
+    await intakeRef.update({
+      status: "approved",
+      approvedAt: new Date(),
+      updatedAt: new Date(),
+      reviewed_by: context.auth?.uid || "admin",
+    });
+    
+    console.log(`✅ Customization approved for intake: ${intakeId}`);
+    
+    return {
+      success: true,
+      message: "Customization approved successfully",
+    };
+  } catch (error) {
+    console.error("Error approving customization:", error);
+    return {
+      success: false,
+      error: `Failed to approve customization: ${(error as Error).message}`,
+    };
+  }
+});
+
+// Reject customization
+export const rejectCustomization = functions.https.onCall(async (data, context) => {
+  try {
+    const { intakeId, reason } = data;
+    
+    if (!intakeId || !reason) {
+      return { success: false, error: "Missing intakeId or reason" };
+    }
+    
+    console.log(`❌ Rejecting customization for intake: ${intakeId}`);
+    
+    const intakeRef = db.collection("intakes").doc(intakeId);
+    const intakeDoc = await intakeRef.get();
+    
+    if (!intakeDoc.exists) {
+      return { success: false, error: "Intake not found" };
+    }
+    
+    await intakeRef.update({
+      status: "rejected",
+      rejectedAt: new Date(),
+      updatedAt: new Date(),
+      rejection_reason: reason,
+      reviewed_by: context.auth?.uid || "admin",
+    });
+    
+    console.log(`❌ Customization rejected for intake: ${intakeId}`);
+    
+    return {
+      success: true,
+      message: "Customization rejected",
+    };
+  } catch (error) {
+    console.error("Error rejecting customization:", error);
+    return {
+      success: false,
+      error: `Failed to reject customization: ${(error as Error).message}`,
+    };
+  }
+});
+
+// Update template settings (including customization rules)
+export const updateTemplateSettings = functions.https.onCall(async (data, context) => {
+  try {
+    const { templateId, default_customization_rules } = data;
+    
+    if (!templateId) {
+      return { success: false, error: "Missing templateId" };
+    }
+    
+    console.log(`⚙️ Updating template settings for: ${templateId}`);
+    
+    const templateRef = db.collection("templates").doc(templateId);
+    const templateDoc = await templateRef.get();
+    
+    if (!templateDoc.exists) {
+      return { success: false, error: "Template not found" };
+    }
+    
+    const updates: any = {
+      updatedAt: new Date(),
+    };
+    
+    if (default_customization_rules !== undefined) {
+      updates.default_customization_rules = default_customization_rules;
+    }
+    
+    await templateRef.update(updates);
+    
+    console.log(`✅ Template settings updated for: ${templateId}`);
+    
+    return {
+      success: true,
+      message: "Template settings updated successfully",
+    };
+  } catch (error) {
+    console.error("Error updating template settings:", error);
+    return {
+      success: false,
+      error: `Failed to update template settings: ${(error as Error).message}`,
+    };
+  }
+});
 
 // ============================================================================
 // TEMPLATE EDITOR APIs

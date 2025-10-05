@@ -367,6 +367,10 @@ exports.intakeManager = {
                     formFields: service.masterFormJson,
                     clientData: intake.clientData,
                     status: intake.status,
+                    customizationEnabled: service.customization_enabled || false,
+                    customizationRules: service.customization_rules || null,
+                    existingCustomFields: intake.custom_fields || [],
+                    existingCustomClauses: intake.custom_clauses || [],
                 },
             });
         }
@@ -379,7 +383,7 @@ exports.intakeManager = {
         .post("/intake/:token/save", async (req, res) => {
         try {
             const { token } = req.params;
-            const { formData } = req.body;
+            const { formData, customFields, customClauses } = req.body;
             if (!token || !formData) {
                 return res.status(400).json({ success: false, error: "Missing required fields" });
             }
@@ -395,12 +399,19 @@ exports.intakeManager = {
             if (intake.expiresAt && intake.expiresAt.toDate() < new Date()) {
                 return res.status(410).json({ success: false, error: "Intake link has expired" });
             }
-            // Save progress
-            await db.collection("intakes").doc(intakeDoc.id).update({
+            // Save progress including customizations
+            const updateData = {
                 clientData: formData,
                 status: "in-progress",
                 updatedAt: new Date(),
-            });
+            };
+            if (customFields !== undefined) {
+                updateData.custom_fields = customFields;
+            }
+            if (customClauses !== undefined) {
+                updateData.custom_clauses = customClauses;
+            }
+            await db.collection("intakes").doc(intakeDoc.id).update(updateData);
             res.json({ success: true, message: "Progress saved successfully" });
         }
         catch (error) {
@@ -410,9 +421,10 @@ exports.intakeManager = {
         return;
     })
         .post("/intake/:token/submit", async (req, res) => {
+        var _a;
         try {
             const { token } = req.params;
-            const { formData, clientInfo } = req.body;
+            const { formData, clientInfo, customFields, customClauses } = req.body;
             console.log('📤 HTTP API: Submitting intake form for token:', token);
             if (!token || !formData) {
                 return res.status(400).json({ success: false, error: "Missing required fields" });
@@ -433,9 +445,16 @@ exports.intakeManager = {
             if (!["opened", "in-progress"].includes(intake.status)) {
                 return res.status(400).json({ success: false, error: "Intake is not available for submission" });
             }
+            // Get service to check if customization requires approval
+            const serviceDoc = await db.collection("services").doc(intake.serviceId).get();
+            const service = serviceDoc.data();
+            const hasCustomizations = (customFields && customFields.length > 0) || (customClauses && customClauses.length > 0);
+            const requiresApproval = service.customization_enabled &&
+                ((_a = service.customization_rules) === null || _a === void 0 ? void 0 : _a.require_approval) &&
+                hasCustomizations;
             const updates = {
                 clientData: formData,
-                status: "submitted",
+                status: requiresApproval ? "pending-approval" : "submitted",
                 submittedAt: new Date(),
                 updatedAt: new Date(),
             };
@@ -443,9 +462,21 @@ exports.intakeManager = {
                 updates.clientName = clientInfo.name;
                 updates.clientEmail = clientInfo.email;
             }
+            if (customFields !== undefined) {
+                updates.custom_fields = customFields;
+            }
+            if (customClauses !== undefined) {
+                updates.custom_clauses = customClauses;
+            }
+            if (hasCustomizations) {
+                updates.has_customizations = true;
+            }
             await db.collection("intakes").doc(intakeDoc.id).update(updates);
+            const message = requiresApproval
+                ? "Intake form submitted successfully. Your customizations will be reviewed by our team."
+                : "Intake form submitted successfully";
             console.log('✅ HTTP API: Intake form submitted successfully for:', intakeDoc.id);
-            res.json({ success: true, message: "Intake form submitted successfully" });
+            res.json({ success: true, message });
         }
         catch (error) {
             console.error("Error submitting intake form:", error);

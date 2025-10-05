@@ -13,6 +13,7 @@ export interface Template {
     errorMessage?: string;
     etag?: string;
     currentVersion?: number;
+    default_customization_rules?: CustomizationRules;
 }
 export interface InsertionPoint {
     fieldName: string;
@@ -40,6 +41,14 @@ export interface FieldValidation {
     min?: number;
     max?: number;
 }
+export interface CustomizationRules {
+    allow_custom_fields: boolean;
+    allow_custom_clauses: boolean;
+    require_approval: boolean;
+    allowed_field_types: string[];
+    max_custom_fields: number;
+    max_custom_clauses: number;
+}
 export interface Service {
     id: string;
     name: string;
@@ -49,6 +58,8 @@ export interface Service {
     status: "draft" | "active" | "inactive";
     createdAt: Date;
     updatedAt: Date;
+    customization_enabled: boolean;
+    customization_rules: CustomizationRules | null;
 }
 export interface Intake {
     id: string;
@@ -56,14 +67,20 @@ export interface Intake {
     serviceName: string;
     linkToken: string;
     clientData: Record<string, any>;
-    status: "link-generated" | "opened" | "in-progress" | "submitted" | "approved" | "rejected" | "documents-generated";
+    status: "link-generated" | "opened" | "in-progress" | "submitted" | "pending-approval" | "approved" | "rejected" | "documents-generated";
     createdAt: Date;
     updatedAt: Date;
     submittedAt?: Date;
     approvedAt?: Date;
+    rejectedAt?: Date;
     clientEmail?: string;
     clientName?: string;
     expiresAt?: Date;
+    has_customizations?: boolean;
+    custom_fields?: any[];
+    custom_clauses?: any[];
+    rejection_reason?: string;
+    reviewed_by?: string;
     versionSnapshot?: {
         templateVersions: Record<string, number>;
         effectiveSchema?: any[];
@@ -98,6 +115,7 @@ export interface CreateServiceRequest {
     name: string;
     description: string;
     templateIds: string[];
+    customization?: CustomizationRules | null;
 }
 export interface GenerateIntakeLinkRequest {
     serviceId: string;

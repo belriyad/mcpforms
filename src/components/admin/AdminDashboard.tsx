@@ -5,8 +5,9 @@ import { useAuth } from '@/lib/auth/AuthProvider'
 import TemplateManager from './TemplateManager'
 import ServiceManager from './ServiceManager'
 import IntakeMonitor from './IntakeMonitor'
+import IntakeCustomizationManager from './IntakeCustomizationManager'
 
-type TabType = 'templates' | 'services' | 'intakes'
+type TabType = 'templates' | 'services' | 'intakes' | 'customizations'
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('templates')
@@ -17,6 +18,7 @@ export default function AdminDashboard() {
     { id: 'templates' as TabType, name: 'Templates', icon: '📄' },
     { id: 'services' as TabType, name: 'Services', icon: '⚙️' },
     { id: 'intakes' as TabType, name: 'Intakes', icon: '📝' },
+    { id: 'customizations' as TabType, name: 'Customizations', icon: '✨' },
   ]
 
   return (
@@ -108,6 +110,7 @@ export default function AdminDashboard() {
         {activeTab === 'templates' && <TemplateManager />}
         {activeTab === 'services' && <ServiceManager />}
         {activeTab === 'intakes' && <IntakeMonitor />}
+        {activeTab === 'customizations' && <IntakeCustomizationManager />}
       </main>
     </div>
   )

@@ -14,6 +14,10 @@ export declare const getDocumentDownloadUrl: functions.HttpsFunction & functions
 export declare const generateDocumentsWithAI: functions.HttpsFunction & functions.Runnable<any>;
 export declare const downloadDocument: functions.HttpsFunction;
 export declare const intakeFormAPI: functions.HttpsFunction;
+export declare const listIntakes: functions.HttpsFunction & functions.Runnable<any>;
+export declare const approveCustomization: functions.HttpsFunction & functions.Runnable<any>;
+export declare const rejectCustomization: functions.HttpsFunction & functions.Runnable<any>;
+export declare const updateTemplateSettings: functions.HttpsFunction & functions.Runnable<any>;
 export declare const listTemplates: functions.HttpsFunction & functions.Runnable<any>;
 export declare const getTemplateWithPlaceholders: functions.HttpsFunction & functions.Runnable<any>;
 export declare const suggestPlaceholdersAI: functions.HttpsFunction & functions.Runnable<any>;

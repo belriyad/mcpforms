@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import CustomerCustomization from '@/components/intake/CustomerCustomization'
 import toast from 'react-hot-toast'
 
 interface FormField {
@@ -17,6 +18,15 @@ interface FormField {
   placeholder?: string
 }
 
+interface CustomizationRules {
+  allow_custom_fields: boolean
+  allow_custom_clauses: boolean
+  require_approval: boolean
+  allowed_field_types: string[]
+  max_custom_fields: number
+  max_custom_clauses: number
+}
+
 interface IntakeData {
   intakeId: string
   serviceName: string
@@ -24,6 +34,10 @@ interface IntakeData {
   formFields: FormField[]
   clientData: Record<string, any>
   status: string
+  customizationEnabled: boolean
+  customizationRules: CustomizationRules | null
+  existingCustomFields: any[]
+  existingCustomClauses: any[]
 }
 
 export default function IntakeFormPage() {
@@ -35,6 +49,8 @@ export default function IntakeFormPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [customFields, setCustomFields] = useState<any[]>([])
+  const [customClauses, setCustomClauses] = useState<any[]>([])
   
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm()
 
@@ -71,13 +87,17 @@ export default function IntakeFormPage() {
       }
       
       // Ensure all required properties exist with sensible defaults
-      const validatedData = {
+      const validatedData: IntakeData = {
         intakeId: data.intakeId || '',
         serviceName: data.serviceName || 'Service Information',
         serviceDescription: data.serviceDescription || 'Please complete the form below.',
         formFields: Array.isArray(data.formFields) ? data.formFields : [],
         clientData: data.clientData && typeof data.clientData === 'object' ? data.clientData : {},
-        status: data.status || 'active'
+        status: data.status || 'active',
+        customizationEnabled: data.customizationEnabled || false,
+        customizationRules: data.customizationRules || null,
+        existingCustomFields: Array.isArray(data.existingCustomFields) ? data.existingCustomFields : [],
+        existingCustomClauses: Array.isArray(data.existingCustomClauses) ? data.existingCustomClauses : [],
       }
 
       if (validatedData.formFields.length === 0) {
@@ -85,6 +105,10 @@ export default function IntakeFormPage() {
       }
 
       setIntakeData(validatedData)
+      
+      // Initialize custom fields and clauses from existing data
+      setCustomFields(validatedData.existingCustomFields)
+      setCustomClauses(validatedData.existingCustomClauses)
       
       // Set submitted flag if form is already submitted
       if (validatedData.status === 'submitted') {
@@ -129,7 +153,11 @@ export default function IntakeFormPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ formData }),
+        body: JSON.stringify({ 
+          formData,
+          customFields,
+          customClauses,
+        }),
       })
       console.log('✅ Progress saved successfully')
     } catch (err) {
@@ -156,7 +184,9 @@ export default function IntakeFormPage() {
           clientInfo: {
             name: formData.clientName || '',
             email: formData.clientEmail || '',
-          }
+          },
+          customFields,
+          customClauses,
         }),
       })
 
@@ -367,6 +397,17 @@ export default function IntakeFormPage() {
                     </p>
                   </div>
                 </div>
+              )}
+
+              {/* Customer Customization Section */}
+              {intakeData.customizationEnabled && intakeData.customizationRules && !isSubmitted && (
+                <CustomerCustomization
+                  rules={intakeData.customizationRules}
+                  onCustomFieldsChange={setCustomFields}
+                  onCustomClausesChange={setCustomClauses}
+                  existingCustomFields={customFields}
+                  existingCustomClauses={customClauses}
+                />
               )}
 
               <div className="pt-6 border-t">

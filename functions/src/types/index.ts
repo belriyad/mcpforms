@@ -14,6 +14,7 @@ export interface Template {
   errorMessage?: string;
   etag?: string; // For optimistic locking
   currentVersion?: number; // Current version number
+  default_customization_rules?: CustomizationRules; // Default rules for services using this template
 }
 
 export interface InsertionPoint {
@@ -45,6 +46,16 @@ export interface FieldValidation {
   max?: number;
 }
 
+// Customization types
+export interface CustomizationRules {
+  allow_custom_fields: boolean;
+  allow_custom_clauses: boolean;
+  require_approval: boolean;
+  allowed_field_types: string[];
+  max_custom_fields: number;
+  max_custom_clauses: number;
+}
+
 // Service types
 export interface Service {
   id: string;
@@ -55,6 +66,8 @@ export interface Service {
   status: "draft" | "active" | "inactive";
   createdAt: Date;
   updatedAt: Date;
+  customization_enabled: boolean;
+  customization_rules: CustomizationRules | null;
 }
 
 // Intake types
@@ -64,14 +77,20 @@ export interface Intake {
   serviceName: string;
   linkToken: string;
   clientData: Record<string, any>;
-  status: "link-generated" | "opened" | "in-progress" | "submitted" | "approved" | "rejected" | "documents-generated";
+  status: "link-generated" | "opened" | "in-progress" | "submitted" | "pending-approval" | "approved" | "rejected" | "documents-generated";
   createdAt: Date;
   updatedAt: Date;
   submittedAt?: Date;
   approvedAt?: Date;
+  rejectedAt?: Date;
   clientEmail?: string;
   clientName?: string;
   expiresAt?: Date;
+  has_customizations?: boolean;
+  custom_fields?: any[];
+  custom_clauses?: any[];
+  rejection_reason?: string;
+  reviewed_by?: string;
   versionSnapshot?: {
     templateVersions: Record<string, number>; // templateId -> version number
     effectiveSchema?: any[]; // PlaceholderField[] - avoiding circular dependency
@@ -112,6 +131,7 @@ export interface CreateServiceRequest {
   name: string;
   description: string;
   templateIds: string[];
+  customization?: CustomizationRules | null;
 }
 
 export interface GenerateIntakeLinkRequest {

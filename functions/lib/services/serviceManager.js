@@ -45,7 +45,7 @@ exports.serviceManager = {
     async createService(data) {
         console.log("🚀 ServiceManager: Creating service with data:", JSON.stringify(data, null, 2));
         try {
-            const { name, description, templateIds } = data;
+            const { name, description, templateIds, customization } = data;
             if (!name || !description || !templateIds || templateIds.length === 0) {
                 console.log("❌ ServiceManager: Missing required fields");
                 return { success: false, error: "Missing required fields" };
@@ -72,6 +72,10 @@ exports.serviceManager = {
             // Consolidate fields from all templates
             const masterFormJson = exports.serviceManager.consolidateFields(templates);
             console.log(`📝 ServiceManager: Consolidated ${masterFormJson.length} fields`);
+            // Log customization settings
+            if (customization) {
+                console.log(`🎨 ServiceManager: Customization enabled with settings:`, customization);
+            }
             const serviceId = (0, uuid_1.v4)();
             const service = {
                 id: serviceId,
@@ -82,6 +86,9 @@ exports.serviceManager = {
                 status: "draft",
                 createdAt: new Date(),
                 updatedAt: new Date(),
+                // Add customization settings
+                customization_enabled: Boolean(customization),
+                customization_rules: customization || null,
             };
             console.log("💾 ServiceManager: Saving service to Firestore:", serviceId);
             await db.collection("services").doc(serviceId).set(service);

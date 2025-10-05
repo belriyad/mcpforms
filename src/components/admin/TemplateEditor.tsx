@@ -44,6 +44,11 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
   const [lockHolder, setLockHolder] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [activeTab, setActiveTab] = useState('editor');
+  const [enableCustomization, setEnableCustomization] = useState(false);
+  const [allowCustomFields, setAllowCustomFields] = useState(true);
+  const [allowCustomClauses, setAllowCustomClauses] = useState(true);
+  const [requireApproval, setRequireApproval] = useState(true);
+  const [allowedFieldTypes, setAllowedFieldTypes] = useState<string[]>(['text', 'email', 'number', 'date']);
   const { toast } = useToast();
 
   const functions = getFunctions();
@@ -72,6 +77,16 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
 
       if (result.data.success) {
         setTemplate(result.data.data);
+        
+        // Load customization rules if they exist
+        if (result.data.data.default_customization_rules) {
+          const rules = result.data.data.default_customization_rules;
+          setEnableCustomization(true);
+          setAllowCustomFields(rules.allow_custom_fields);
+          setAllowCustomClauses(rules.allow_custom_clauses);
+          setRequireApproval(rules.require_approval);
+          setAllowedFieldTypes(rules.allowed_field_types || []);
+        }
         
         // Load latest version placeholders
         if (result.data.data.currentVersion) {
@@ -335,10 +350,14 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="editor">
             <Edit className="w-4 h-4 mr-2" />
             Editor
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            Settings
           </TabsTrigger>
           <TabsTrigger value="history">
             <History className="w-4 h-4 mr-2" />
@@ -361,6 +380,204 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
             readOnly={!isLocked || lockHolder !== 'you'}
             templateId={templateId}
           />
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Default Customization Rules</CardTitle>
+              <CardDescription>
+                Configure default customization settings for services using this template.
+                Services can override these settings when created.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Enable Customization Toggle */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex-1">
+                  <Label className="text-base font-medium">Enable Customization</Label>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Allow services using this template to enable customer customizations
+                  </p>
+                </div>
+                <Button
+                  variant={enableCustomization ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setEnableCustomization(!enableCustomization);
+                    setHasChanges(true);
+                  }}
+                >
+                  {enableCustomization ? 'Enabled' : 'Disabled'}
+                </Button>
+              </div>
+
+              {enableCustomization && (
+                <>
+                  {/* Custom Fields */}
+                  <div className="space-y-3 p-4 border rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="allowCustomFields"
+                        checked={allowCustomFields}
+                        onChange={(e) => {
+                          setAllowCustomFields(e.target.checked);
+                          setHasChanges(true);
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="allowCustomFields" className="font-medium cursor-pointer">
+                        Allow Custom Fields
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-600 ml-6">
+                      Customers can add their own custom fields to the intake form
+                    </p>
+                  </div>
+
+                  {/* Custom Clauses */}
+                  <div className="space-y-3 p-4 border rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="allowCustomClauses"
+                        checked={allowCustomClauses}
+                        onChange={(e) => {
+                          setAllowCustomClauses(e.target.checked);
+                          setHasChanges(true);
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="allowCustomClauses" className="font-medium cursor-pointer">
+                        Allow Custom Clauses
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-600 ml-6">
+                      Customers can add custom clauses or special terms to documents
+                    </p>
+                  </div>
+
+                  {/* Require Approval */}
+                  <div className="space-y-3 p-4 border rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="requireApproval"
+                        checked={requireApproval}
+                        onChange={(e) => {
+                          setRequireApproval(e.target.checked);
+                          setHasChanges(true);
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="requireApproval" className="font-medium cursor-pointer">
+                        Require Admin Approval
+                      </Label>
+                    </div>
+                    <p className="text-sm text-gray-600 ml-6">
+                      All customizations must be reviewed and approved before document generation
+                    </p>
+                  </div>
+
+                  {/* Allowed Field Types */}
+                  {allowCustomFields && (
+                    <div className="space-y-3 p-4 border rounded-lg">
+                      <Label className="font-medium">Allowed Field Types</Label>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Select which field types customers can add
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {['text', 'email', 'number', 'date', 'checkbox', 'dropdown', 'textarea', 'phone'].map((type) => (
+                          <div key={type} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`fieldType-${type}`}
+                              checked={allowedFieldTypes.includes(type)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAllowedFieldTypes([...allowedFieldTypes, type]);
+                                } else {
+                                  setAllowedFieldTypes(allowedFieldTypes.filter(t => t !== type));
+                                }
+                                setHasChanges(true);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <Label htmlFor={`fieldType-${type}`} className="capitalize cursor-pointer text-sm">
+                              {type}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Info Box */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex">
+                      <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                      <div className="text-sm text-blue-900">
+                        <p className="font-medium mb-1">These are default settings</p>
+                        <p>
+                          Services using this template will inherit these customization rules by default.
+                          Individual services can override these settings when created.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex justify-end pt-4">
+                    <Button
+                      onClick={async () => {
+                        try {
+                          setSaving(true);
+                          const updateTemplate = httpsCallable(functions, 'updateTemplateSettings');
+                          const result: any = await updateTemplate({
+                            templateId,
+                            default_customization_rules: {
+                              allow_custom_fields: allowCustomFields,
+                              allow_custom_clauses: allowCustomClauses,
+                              require_approval: requireApproval,
+                              allowed_field_types: allowedFieldTypes,
+                              max_custom_fields: 10,
+                              max_custom_clauses: 5,
+                            },
+                          });
+
+                          if (result.data.success) {
+                            setHasChanges(false);
+                            toast({
+                              title: 'Settings Saved',
+                              description: 'Customization rules updated successfully',
+                            });
+                          } else {
+                            toast({
+                              title: 'Save Failed',
+                              description: result.data.error || 'Failed to save settings',
+                              variant: 'destructive',
+                            });
+                          }
+                        } catch (error: any) {
+                          toast({
+                            title: 'Error',
+                            description: error.message || 'Failed to save settings',
+                            variant: 'destructive',
+                          });
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      disabled={!hasChanges || saving}
+                    >
+                      {saving ? 'Saving...' : 'Save Customization Rules'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="history">

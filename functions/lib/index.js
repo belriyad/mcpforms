@@ -36,8 +36,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.getIntakeWithOverrides = exports.startIntakeWithOverrides = exports.hasPendingOverrides = exports.getOverrideSections = exports.freezeIntakeVersion = exports.getEffectiveSchema = exports.getOverrides = exports.reviewOverride = exports.validateCustomerOverride = exports.createCustomerOverride = exports.generateCustomClauseAI = exports.validatePlaceholders = exports.getTemplateAuditTrail = exports.getTemplateVersionHistory = exports.checkTemplateLock = exports.refreshTemplateLock = exports.releaseTemplateLock = exports.acquireTemplateLock = exports.rollbackTemplate = exports.approveTemplateVersion = exports.saveTemplateDraft = exports.suggestPlaceholdersAI = exports.getTemplateWithPlaceholders = exports.listTemplates = exports.intakeFormAPI = exports.downloadDocument = exports.generateDocumentsWithAI = exports.getDocumentDownloadUrl = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.getIntakeFormSchema = exports.generateIntakeLinkWithOverrides = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
+exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.getIntakeWithOverrides = exports.startIntakeWithOverrides = exports.hasPendingOverrides = exports.getOverrideSections = exports.freezeIntakeVersion = exports.getEffectiveSchema = exports.getOverrides = exports.reviewOverride = exports.validateCustomerOverride = exports.createCustomerOverride = exports.generateCustomClauseAI = exports.validatePlaceholders = exports.getTemplateAuditTrail = exports.getTemplateVersionHistory = exports.checkTemplateLock = exports.refreshTemplateLock = exports.releaseTemplateLock = exports.acquireTemplateLock = exports.rollbackTemplate = exports.approveTemplateVersion = exports.saveTemplateDraft = exports.suggestPlaceholdersAI = exports.getTemplateWithPlaceholders = exports.listTemplates = exports.updateTemplateSettings = exports.rejectCustomization = exports.approveCustomization = exports.listIntakes = exports.intakeFormAPI = exports.downloadDocument = exports.generateDocumentsWithAI = exports.getDocumentDownloadUrl = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.getIntakeFormSchema = exports.generateIntakeLinkWithOverrides = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
 const functions = __importStar(require("firebase-functions"));
+const admin = __importStar(require("firebase-admin"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const templateParser_1 = require("./services/templateParser");
@@ -47,6 +48,8 @@ const documentGenerator_1 = require("./services/documentGenerator");
 const documentGeneratorAI_1 = require("./services/documentGeneratorAI");
 const templateEditorAPI = __importStar(require("./services/templateEditorAPI"));
 const intakeCustomizationAPI = __importStar(require("./services/intakeCustomizationAPI"));
+// Initialize Firestore
+const db = admin.firestore();
 // Template Upload and AI Parsing
 exports.uploadTemplateAndParse = functions
     .runWith({
@@ -117,6 +120,137 @@ const app = (0, express_1.default)();
 app.use((0, cors_1.default)({ origin: true }));
 app.use("/", intakeManager_1.intakeManager.intakeFormAPI);
 exports.intakeFormAPI = functions.https.onRequest(app);
+// List intakes with optional status filter
+exports.listIntakes = functions.https.onCall(async (data, context) => {
+    try {
+        const { status } = data;
+        console.log(`📋 Listing intakes${status ? ` with status: ${status}` : ''}`);
+        let intakesQuery = db.collection("intakes");
+        if (status) {
+            intakesQuery = intakesQuery.where("status", "==", status);
+        }
+        const snapshot = await intakesQuery.orderBy("submittedAt", "desc").get();
+        const intakes = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return Object.assign(Object.assign({ id: doc.id }, data), { submittedAt: data.submittedAt, createdAt: data.createdAt, updatedAt: data.updatedAt });
+        });
+        console.log(`✅ Found ${intakes.length} intakes`);
+        return {
+            success: true,
+            data: intakes,
+        };
+    }
+    catch (error) {
+        console.error("Error listing intakes:", error);
+        return {
+            success: false,
+            error: `Failed to list intakes: ${error.message}`,
+        };
+    }
+});
+// Approve customization
+exports.approveCustomization = functions.https.onCall(async (data, context) => {
+    var _a;
+    try {
+        const { intakeId } = data;
+        if (!intakeId) {
+            return { success: false, error: "Missing intakeId" };
+        }
+        console.log(`✅ Approving customization for intake: ${intakeId}`);
+        const intakeRef = db.collection("intakes").doc(intakeId);
+        const intakeDoc = await intakeRef.get();
+        if (!intakeDoc.exists) {
+            return { success: false, error: "Intake not found" };
+        }
+        await intakeRef.update({
+            status: "approved",
+            approvedAt: new Date(),
+            updatedAt: new Date(),
+            reviewed_by: ((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid) || "admin",
+        });
+        console.log(`✅ Customization approved for intake: ${intakeId}`);
+        return {
+            success: true,
+            message: "Customization approved successfully",
+        };
+    }
+    catch (error) {
+        console.error("Error approving customization:", error);
+        return {
+            success: false,
+            error: `Failed to approve customization: ${error.message}`,
+        };
+    }
+});
+// Reject customization
+exports.rejectCustomization = functions.https.onCall(async (data, context) => {
+    var _a;
+    try {
+        const { intakeId, reason } = data;
+        if (!intakeId || !reason) {
+            return { success: false, error: "Missing intakeId or reason" };
+        }
+        console.log(`❌ Rejecting customization for intake: ${intakeId}`);
+        const intakeRef = db.collection("intakes").doc(intakeId);
+        const intakeDoc = await intakeRef.get();
+        if (!intakeDoc.exists) {
+            return { success: false, error: "Intake not found" };
+        }
+        await intakeRef.update({
+            status: "rejected",
+            rejectedAt: new Date(),
+            updatedAt: new Date(),
+            rejection_reason: reason,
+            reviewed_by: ((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid) || "admin",
+        });
+        console.log(`❌ Customization rejected for intake: ${intakeId}`);
+        return {
+            success: true,
+            message: "Customization rejected",
+        };
+    }
+    catch (error) {
+        console.error("Error rejecting customization:", error);
+        return {
+            success: false,
+            error: `Failed to reject customization: ${error.message}`,
+        };
+    }
+});
+// Update template settings (including customization rules)
+exports.updateTemplateSettings = functions.https.onCall(async (data, context) => {
+    try {
+        const { templateId, default_customization_rules } = data;
+        if (!templateId) {
+            return { success: false, error: "Missing templateId" };
+        }
+        console.log(`⚙️ Updating template settings for: ${templateId}`);
+        const templateRef = db.collection("templates").doc(templateId);
+        const templateDoc = await templateRef.get();
+        if (!templateDoc.exists) {
+            return { success: false, error: "Template not found" };
+        }
+        const updates = {
+            updatedAt: new Date(),
+        };
+        if (default_customization_rules !== undefined) {
+            updates.default_customization_rules = default_customization_rules;
+        }
+        await templateRef.update(updates);
+        console.log(`✅ Template settings updated for: ${templateId}`);
+        return {
+            success: true,
+            message: "Template settings updated successfully",
+        };
+    }
+    catch (error) {
+        console.error("Error updating template settings:", error);
+        return {
+            success: false,
+            error: `Failed to update template settings: ${error.message}`,
+        };
+    }
+});
 // ============================================================================
 // TEMPLATE EDITOR APIs
 // ============================================================================

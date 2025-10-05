@@ -21,6 +21,14 @@ interface Template {
   id: string
   name: string
   status: string
+  default_customization_rules?: {
+    allow_custom_fields?: boolean
+    allow_custom_clauses?: boolean
+    require_approval?: boolean
+    allowed_field_types?: string[]
+    max_custom_fields?: number
+    max_custom_clauses?: number
+  }
 }
 
 export default function ServiceManager() {
@@ -251,6 +259,46 @@ function CreateServiceForm({ templates, onClose, onServiceCreated }: CreateServi
   const [description, setDescription] = useState('')
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
+  
+  // Customization settings
+  const [enableCustomization, setEnableCustomization] = useState(false)
+  const [allowCustomFields, setAllowCustomFields] = useState(true)
+  const [allowCustomClauses, setAllowCustomClauses] = useState(true)
+  const [requireApproval, setRequireApproval] = useState(true)
+  const [allowedFieldTypes, setAllowedFieldTypes] = useState<string[]>([
+    'text', 'email', 'phone', 'date', 'number', 'address', 'currency', 'dropdown'
+  ])
+  const [inheritedFrom, setInheritedFrom] = useState<string | null>(null)
+
+  // Load template defaults when templates are selected
+  useEffect(() => {
+    if (selectedTemplates.length === 0) {
+      setInheritedFrom(null)
+      return
+    }
+
+    // Find templates with default customization rules
+    const templatesWithRules = selectedTemplates
+      .map(id => templates.find(t => t.id === id))
+      .filter(t => t?.default_customization_rules)
+
+    if (templatesWithRules.length > 0) {
+      // Use the first template's defaults
+      const firstTemplate = templatesWithRules[0]!
+      const rules = firstTemplate.default_customization_rules!
+      
+      console.log('📋 Inheriting customization rules from template:', firstTemplate.name, rules)
+      
+      setEnableCustomization(true)
+      if (rules.allow_custom_fields !== undefined) setAllowCustomFields(rules.allow_custom_fields)
+      if (rules.allow_custom_clauses !== undefined) setAllowCustomClauses(rules.allow_custom_clauses)
+      if (rules.require_approval !== undefined) setRequireApproval(rules.require_approval)
+      if (rules.allowed_field_types) setAllowedFieldTypes(rules.allowed_field_types)
+      setInheritedFrom(firstTemplate.name)
+      
+      toast.success(`Inherited customization settings from ${firstTemplate.name}`)
+    }
+  }, [selectedTemplates, templates])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -273,6 +321,14 @@ function CreateServiceForm({ templates, onClose, onServiceCreated }: CreateServi
         name: name.trim(),
         description: description.trim(),
         templateIds: selectedTemplates,
+        customization: enableCustomization ? {
+          allow_custom_fields: allowCustomFields,
+          allow_custom_clauses: allowCustomClauses,
+          require_approval: requireApproval,
+          allowed_field_types: allowedFieldTypes,
+          max_custom_fields: 10,
+          max_custom_clauses: 5
+        } : null
       })
 
       console.log('✅ ServiceManager: Service creation result:', result)
@@ -374,6 +430,103 @@ function CreateServiceForm({ templates, onClose, onServiceCreated }: CreateServi
                       <span className="ml-3 text-sm text-gray-900">{template.name}</span>
                     </label>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Customization Settings */}
+            <div className="border-t pt-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">Customer Customization Options</h4>
+                  <p className="text-xs text-gray-500 mt-1">Allow customers to add custom fields and clauses to this service</p>
+                  {inheritedFrom && (
+                    <div className="flex items-center mt-2 text-xs">
+                      <svg className="w-3 h-3 text-blue-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                        <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+                      </svg>
+                      <span className="text-blue-600 font-medium">Inherited from template: {inheritedFrom}</span>
+                      <span className="text-gray-500 ml-1">(you can override these settings)</span>
+                    </div>
+                  )}
+                </div>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableCustomization}
+                    onChange={(e) => setEnableCustomization(e.target.checked)}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="ml-2 text-sm font-medium text-gray-700">Enable</span>
+                </label>
+              </div>
+
+              {enableCustomization && (
+                <div className="space-y-3 pl-4 border-l-2 border-gray-200">
+                  <label className="flex items-start cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowCustomFields}
+                      onChange={(e) => setAllowCustomFields(e.target.checked)}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 mt-0.5"
+                    />
+                    <div className="ml-3">
+                      <span className="text-sm font-medium text-gray-700">Allow Custom Fields</span>
+                      <p className="text-xs text-gray-500">Customers can add new fields to the intake form</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowCustomClauses}
+                      onChange={(e) => setAllowCustomClauses(e.target.checked)}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 mt-0.5"
+                    />
+                    <div className="ml-3">
+                      <span className="text-sm font-medium text-gray-700">Allow Custom Clauses</span>
+                      <p className="text-xs text-gray-500">Customers can add custom text clauses to documents</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={requireApproval}
+                      onChange={(e) => setRequireApproval(e.target.checked)}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 mt-0.5"
+                    />
+                    <div className="ml-3">
+                      <span className="text-sm font-medium text-gray-700">Require Admin Approval</span>
+                      <p className="text-xs text-gray-500">Admin must approve customizations before use</p>
+                    </div>
+                  </label>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-2">
+                      Allowed Field Types
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['text', 'email', 'phone', 'date', 'number', 'address', 'currency', 'dropdown'].map(type => (
+                        <label key={type} className="flex items-center text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={allowedFieldTypes.includes(type)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setAllowedFieldTypes([...allowedFieldTypes, type])
+                              } else {
+                                setAllowedFieldTypes(allowedFieldTypes.filter(t => t !== type))
+                              }
+                            }}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="ml-2 text-gray-600 capitalize">{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
