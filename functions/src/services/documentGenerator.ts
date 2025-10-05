@@ -393,6 +393,165 @@ export const documentGenerator = {
         console.log(`[TRIAGE-v3.0] Successful replacements: ${quotedReplacements}`);
         console.log(`[TRIAGE-v3.0] Missing required data: ${quotedPlaceholdersMissing}`);
         
+        // SOLUTION 1: AGGRESSIVE DIRECT TEXT REPLACEMENT
+        // Replace field values wherever they might appear in the document
+        console.log("[AGGRESSIVE-REPLACE] ========== STARTING AGGRESSIVE TEXT REPLACEMENT ==========");
+        
+        let aggressiveReplacements = 0;
+        
+        // Helper function to replace text only within <w:t> tags (not in XML structure)
+        function replaceInTextNodes(xml: string, searchText: string, replaceWith: string, caseInsensitive: boolean = false): { xml: string, count: number } {
+          let count = 0;
+          const flags = caseInsensitive ? 'gi' : 'g';
+          
+          // Pattern to match text within <w:t> tags
+          const textNodePattern = /(<w:t[^>]*>)(.*?)(<\/w:t>)/g;
+          
+          xml = xml.replace(textNodePattern, (match, openTag, textContent, closeTag) => {
+            try {
+              const searchPattern = new RegExp(escapeRegExp(searchText), flags);
+              if (searchPattern.test(textContent)) {
+                count++;
+                const newContent = textContent.replace(searchPattern, replaceWith);
+                return openTag + newContent + closeTag;
+              }
+            } catch (e) {
+              // Skip if regex fails
+            }
+            return match;
+          });
+          
+          return { xml, count };
+        }
+        
+        // AGGRESSIVE STRATEGY 1: Field name pattern matching
+        // Look for patterns like "field_name", "Field Name", "fieldName" in text
+        const fieldPatternMap: Record<string, string[]> = {
+          county: ['county', 'County', 'COUNTY'],
+          current_trustees: ['current trustees', 'Current Trustees', 'current trustee'],
+          successor_trustees: ['successor trustees', 'Successor Trustees'],
+          successor_co_trustees: ['successor co-trustees', 'Successor Co-Trustees'],
+          execution_day: ['execution day', 'day'],
+          execution_year: ['execution year', 'year'],
+          notary_commission_expires: ['commission expires'],
+        };
+        
+        for (const [fieldName, patterns] of Object.entries(fieldPatternMap)) {
+          const fieldValue = clientData[fieldName];
+          if (!fieldValue) continue;
+          
+          for (const pattern of patterns) {
+            const result = replaceInTextNodes(xmlContent, pattern, String(fieldValue), false);
+            if (result.count > 0) {
+              xmlContent = result.xml;
+              aggressiveReplacements += result.count;
+              console.log(`[AGGRESSIVE-REPLACE] ✅ "${pattern}" → "${fieldValue}" (${result.count}x)`);
+            }
+          }
+        }
+        
+        // AGGRESSIVE STRATEGY 2: Replace field key names directly
+        // Templates might use "trust_name" or "trustName" as literal text
+        for (const [fieldKey, fieldValue] of Object.entries(clientData)) {
+          if (!fieldValue || typeof fieldValue !== 'string') continue;
+          
+          // Try exact field key match (trust_name)
+          const result1 = replaceInTextNodes(xmlContent, fieldKey, String(fieldValue), false);
+          if (result1.count > 0) {
+            xmlContent = result1.xml;
+            aggressiveReplacements += result1.count;
+            console.log(`[AGGRESSIVE-REPLACE] ✅ Key "${fieldKey}" → "${fieldValue}" (${result1.count}x)`);
+          }
+          
+          // Try readable format (trust name)
+          const readableKey = fieldKey.replace(/_/g, ' ');
+          if (readableKey !== fieldKey) {
+            const result2 = replaceInTextNodes(xmlContent, readableKey, String(fieldValue), true);
+            if (result2.count > 0) {
+              xmlContent = result2.xml;
+              aggressiveReplacements += result2.count;
+              console.log(`[AGGRESSIVE-REPLACE] ✅ Readable "${readableKey}" → "${fieldValue}" (${result2.count}x)`);
+            }
+          }
+        }
+        
+        // AGGRESSIVE STRATEGY 3: Ultra-targeted patterns for last 3 stubborn fields
+        // These fields weren't catching with general patterns, so we add very specific variants
+        console.log(`[AGGRESSIVE-FINAL] 🎯 Targeting final 3 stubborn fields...`);
+        let finalPushReplacements = 0;
+        
+        // 1. notary_commission_expires
+        if (clientData.notary_commission_expires) {
+          const notaryExpirePatterns = [
+            "notary commission expires",
+            "commission expires", 
+            "expires on",
+            "Notary Commission Expires",
+            "Commission Expires on",
+            "My Commission Expires",
+            "expires",
+            "Expiration Date",
+            "expiration date"
+          ];
+          for (const p of notaryExpirePatterns) {
+            const r = replaceInTextNodes(xmlContent, p, String(clientData.notary_commission_expires), true);
+            if (r.count > 0) {
+              xmlContent = r.xml;
+              finalPushReplacements += r.count;
+              console.log(`[AGGRESSIVE-FINAL] ✅ Notary Expires "${p}" → "${clientData.notary_commission_expires}" (${r.count}x)`);
+            }
+          }
+        }
+        
+        // 2. execution_year
+        if (clientData.execution_year) {
+          const yearPatterns = [
+            "execution_year",
+            "execution year", 
+            ", 20__",
+            ", 20____",
+            "year",
+            "Year",
+            "____, 20__"
+          ];
+          for (const p of yearPatterns) {
+            const r = replaceInTextNodes(xmlContent, p, String(clientData.execution_year), true);
+            if (r.count > 0) {
+              xmlContent = r.xml;
+              finalPushReplacements += r.count;
+              console.log(`[AGGRESSIVE-FINAL] ✅ Execution Year "${p}" → "${clientData.execution_year}" (${r.count}x)`);
+            }
+          }
+        }
+        
+        // 3. current_trustees
+        if (clientData.current_trustees) {
+          const currentTrusteePatterns = [
+            "current_trustees",
+            "current trustees",
+            "Current Trustee(s)",
+            "Current Trustees",
+            "Trustee(s)",
+            "acting Trustee",
+            "serving Trustee"
+          ];
+          for (const p of currentTrusteePatterns) {
+            const r = replaceInTextNodes(xmlContent, p, String(clientData.current_trustees), true);
+            if (r.count > 0) {
+              xmlContent = r.xml;
+              finalPushReplacements += r.count;
+              console.log(`[AGGRESSIVE-FINAL] ✅ Current Trustees "${p}" → "${clientData.current_trustees}" (${r.count}x)`);
+            }
+          }
+        }
+        
+        console.log(`[AGGRESSIVE-FINAL] 🎯 Final push replacements: ${finalPushReplacements}`);
+        aggressiveReplacements += finalPushReplacements;
+        
+        console.log(`[AGGRESSIVE-REPLACE] Total aggressive replacements: ${aggressiveReplacements}`);
+        quotedReplacements += aggressiveReplacements;
+        console.log(`[AGGRESSIVE-REPLACE] ========== FINAL COMBINED COUNT: ${quotedReplacements} ==========`);
+        
         // Store for outer scope access
         quotedReplacementsTotal = quotedReplacements;
         
