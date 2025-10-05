@@ -1,7 +1,9 @@
 import * as admin from "firebase-admin";
 import { v4 as uuidv4 } from "uuid";
 import { Intake, Service, Template, DocumentArtifact, ApiResponse } from "../types";
+import { IntakeVersionSnapshot, CustomerOverrideSection, PlaceholderField } from "../types/versioning";
 import { documentGeneratorAI } from "./documentGeneratorAI";
+import { getOverrideSections, getEffectiveSchema } from "./customerOverrideManager";
 
 // Initialize Firebase Admin if not already initialized (needed for module loading order)
 if (!admin.apps.length) {
@@ -51,7 +53,11 @@ export const documentGenerator = {
         return { success: false, error: "Intake not found" };
       }
 
-      const intake = { ...intakeDoc.data(), id: intakeId } as Intake;
+      const intake = { 
+        ...intakeDoc.data(), 
+        id: intakeId,
+        versionSnapshot: intakeDoc.data()?.versionSnapshot as IntakeVersionSnapshot | undefined
+      } as Intake & { versionSnapshot?: IntakeVersionSnapshot };
       if (!regenerate && intake.status !== "approved") {
         return { success: false, error: "Intake must be approved before generating documents" };
       }
@@ -68,19 +74,67 @@ export const documentGenerator = {
       }
 
       const service = serviceDoc.data() as Service;
-      const templateDocs = await Promise.all(
-        service.templateIds.map(id => db.collection("templates").doc(id).get())
-      );
-
+      
+      // Load templates with pinned versions if versionSnapshot exists
       const templates: Template[] = [];
-      for (const doc of templateDocs) {
-        if (doc.exists) {
-          templates.push(doc.data() as Template);
+      const templateVersions = intake.versionSnapshot?.templateVersions || {};
+      
+      console.log(`📌 [DOC-GEN] Version snapshot:`, templateVersions);
+      
+      for (const templateId of service.templateIds) {
+        const templateDoc = await db.collection("templates").doc(templateId).get();
+        if (!templateDoc.exists) {
+          console.warn(`⚠️ [DOC-GEN] Template ${templateId} not found`);
+          continue;
         }
+        
+        const template = templateDoc.data() as Template;
+        
+        // If we have a pinned version, load that version's placeholders
+        const pinnedVersion = templateVersions[templateId];
+        if (pinnedVersion) {
+          console.log(`📌 [DOC-GEN] Using pinned version ${pinnedVersion} for template ${templateId}`);
+          const versionDoc = await db
+            .collection("templates")
+            .doc(templateId)
+            .collection("versions")
+            .doc(String(pinnedVersion))
+            .get();
+          
+          if (versionDoc.exists) {
+            const versionData = versionDoc.data();
+            // Attach version-specific placeholders to template
+            (template as any).versionedPlaceholders = versionData?.placeholders || [];
+            console.log(`✅ [DOC-GEN] Loaded ${(template as any).versionedPlaceholders?.length || 0} placeholders from version ${pinnedVersion}`);
+          }
+        }
+        
+        templates.push(template);
       }
 
       if (templates.length === 0) {
         return { success: false, error: "No templates found for service" };
+      }
+
+      // Fetch customer override sections if available
+      let overrideSections: Array<{
+        content: string;
+        insertAfter: string;
+        placeholders: PlaceholderField[];
+      }> = [];
+      let effectiveSchema: PlaceholderField[] = [];
+      
+      if (intake.versionSnapshot?.overrideId) {
+        console.log(`🔧 [DOC-GEN] Fetching override sections for intake ${intakeId}`);
+        try {
+          overrideSections = await getOverrideSections(intakeId);
+          effectiveSchema = await getEffectiveSchema(intakeId);
+          console.log(`✅ [DOC-GEN] Loaded ${overrideSections.length} override sections`);
+          console.log(`✅ [DOC-GEN] Loaded effective schema with ${effectiveSchema.length} fields`);
+        } catch (error) {
+          console.error(`⚠️ [DOC-GEN] Failed to load overrides:`, error);
+          // Continue without overrides
+        }
       }
 
       // If regenerating, delete existing artifacts
@@ -93,7 +147,12 @@ export const documentGenerator = {
       
       for (const template of templates) {
         try {
-          const artifactId = await documentGenerator.generateDocumentFromTemplate(template, intake);
+          const artifactId = await documentGenerator.generateDocumentFromTemplate(
+            template, 
+            intake,
+            overrideSections,
+            effectiveSchema
+          );
           artifactIds.push(artifactId);
         } catch (error) {
           console.error(`Error generating document for template ${template.id}:`, error);
@@ -122,7 +181,16 @@ export const documentGenerator = {
     }
   },
 
-  async generateDocumentFromTemplate(template: Template, intake: Intake): Promise<string> {
+  async generateDocumentFromTemplate(
+    template: Template, 
+    intake: Intake,
+    overrideSections: Array<{
+      content: string;
+      insertAfter: string;
+      placeholders: PlaceholderField[];
+    }> = [],
+    effectiveSchema: PlaceholderField[] = []
+  ): Promise<string> {
     const artifactId = uuidv4();
     
     try {
@@ -155,10 +223,21 @@ export const documentGenerator = {
       
       if (template.fileType === "docx") {
         console.log("[v2.2] ABOUT TO CALL fillWordDocument");
-        filledBuffer = await documentGenerator.fillWordDocument(templateBuffer, intake.clientData, template);
+        filledBuffer = await documentGenerator.fillWordDocument(
+          templateBuffer, 
+          intake.clientData, 
+          template,
+          overrideSections,
+          effectiveSchema
+        );
         console.log("[v2.2] RETURNED FROM fillWordDocument");
       } else if (template.fileType === "pdf") {
-        filledBuffer = await documentGenerator.fillPdfDocument(templateBuffer, intake.clientData);
+        filledBuffer = await documentGenerator.fillPdfDocument(
+          templateBuffer, 
+          intake.clientData,
+          overrideSections,
+          effectiveSchema
+        );
       } else {
         throw new Error(`Unsupported file type: ${template.fileType}`);
       }
@@ -190,7 +269,17 @@ export const documentGenerator = {
     }
   },
 
-  async fillWordDocument(templateBuffer: Buffer, clientData: Record<string, any>, template?: any): Promise<Buffer> {
+  async fillWordDocument(
+    templateBuffer: Buffer, 
+    clientData: Record<string, any>, 
+    template?: any,
+    overrideSections: Array<{
+      content: string;
+      insertAfter: string;
+      placeholders: PlaceholderField[];
+    }> = [],
+    effectiveSchema: PlaceholderField[] = []
+  ): Promise<Buffer> {
     // For Word documents, we'll use docxtemplater for proper template filling
     try {
       // MUST RUN: Critical entry point validation
@@ -209,6 +298,8 @@ export const documentGenerator = {
       
       console.log("[TRIAGE-v3.0] Client data keys:", Object.keys(clientData));
       console.log("[TRIAGE-v3.0] Client data sample:", Object.keys(clientData).slice(0, 3).map(k => `${k}=${clientData[k]}`));
+      console.log("[OVERRIDE-v1.0] Override sections:", overrideSections.length);
+      console.log("[OVERRIDE-v1.0] Effective schema fields:", effectiveSchema.length);
       console.log("[TRIAGE-v3.0] Template info:", template ? { id: template.id, name: template.name } : 'no template metadata');
       
       // Use docxtemplater approach with zip manipulation
@@ -724,6 +815,20 @@ export const documentGenerator = {
       }
 
       // Generate the filled document
+      console.log("[OVERRIDE-v1.0] Preparing to generate final document buffer...");
+      
+      // Insert customer override sections if available
+      if (overrideSections.length > 0) {
+        console.log(`[OVERRIDE-v1.0] Inserting ${overrideSections.length} override sections...`);
+        try {
+          await this.insertOverrideSections(zip, overrideSections, clientData);
+          console.log("[OVERRIDE-v1.0] ✅ Override sections inserted successfully");
+        } catch (overrideError) {
+          console.error("[OVERRIDE-v1.0] ❌ Failed to insert override sections:", overrideError);
+          // Continue with document generation even if overrides fail
+        }
+      }
+      
       const filledBuffer = doc.getZip().generate({
         type: 'nodebuffer',
         compression: 'DEFLATE',
@@ -811,8 +916,19 @@ export const documentGenerator = {
     }
   },
 
-  async fillPdfDocument(templateBuffer: Buffer, clientData: Record<string, any>): Promise<Buffer> {
+  async fillPdfDocument(
+    templateBuffer: Buffer, 
+    clientData: Record<string, any>,
+    overrideSections: Array<{
+      content: string;
+      insertAfter: string;
+      placeholders: PlaceholderField[];
+    }> = [],
+    effectiveSchema: PlaceholderField[] = []
+  ): Promise<Buffer> {
     // For PDF documents, we'll use pdf-lib for form filling
+    console.log("[OVERRIDE-v1.0] PDF generation with", overrideSections.length, "override sections");
+    console.log("[OVERRIDE-v1.0] Note: PDF override insertion not fully implemented yet");
     try {
       console.log("Filling PDF document with client data:", Object.keys(clientData));
       
@@ -1543,6 +1659,114 @@ export const documentGenerator = {
     
     console.log(`❌ No smart mapping found for: ${templateFieldName}`);
     return null;
+  },
+
+  /**
+   * Insert customer override sections into a DOCX document
+   * @param zip - PizZip instance containing the document
+   * @param overrideSections - Array of override sections to insert
+   * @param clientData - Client data for placeholder replacement
+   */
+  async insertOverrideSections(
+    zip: any,
+    overrideSections: Array<{
+      content: string;
+      insertAfter: string;
+      placeholders: PlaceholderField[];
+    }>,
+    clientData: Record<string, any>
+  ): Promise<void> {
+    console.log("[OVERRIDE-INSERT] Starting override section insertion...");
+    
+    if (!zip || !zip.files || !zip.files["word/document.xml"]) {
+      throw new Error("Invalid ZIP structure for override insertion");
+    }
+    
+    // Get the main document XML
+    let documentXml = zip.files["word/document.xml"].asText();
+    console.log("[OVERRIDE-INSERT] Document XML length:", documentXml.length);
+    
+    // Process each override section
+    for (let i = 0; i < overrideSections.length; i++) {
+      const section = overrideSections[i];
+      console.log(`[OVERRIDE-INSERT] Processing section ${i + 1}/${overrideSections.length}`);
+      console.log(`[OVERRIDE-INSERT]   Insert after: ${section.insertAfter}`);
+      console.log(`[OVERRIDE-INSERT]   Content length: ${section.content.length}`);
+      console.log(`[OVERRIDE-INSERT]   Placeholders: ${section.placeholders.length}`);
+      
+      // Replace placeholders in override content with client data
+      let processedContent = section.content;
+      for (const placeholder of section.placeholders) {
+        const value = clientData[placeholder.field_key];
+        if (value) {
+          const placeholderPattern = new RegExp(`\\{\\{${placeholder.field_key}\\}\\}`, 'g');
+          processedContent = processedContent.replace(placeholderPattern, String(value));
+          console.log(`[OVERRIDE-INSERT]     Replaced {{${placeholder.field_key}}} with "${value}"`);
+        }
+      }
+      
+      // Convert processed content to DOCX XML format
+      const xmlContent = this.convertTextToDocxXml(processedContent);
+      
+      // Find insertion point
+      let insertionIndex = -1;
+      
+      if (section.insertAfter === 'end') {
+        // Insert before the closing body tag
+        insertionIndex = documentXml.lastIndexOf('</w:body>');
+        console.log(`[OVERRIDE-INSERT]   Inserting at end (index: ${insertionIndex})`);
+      } else {
+        // Try to find the anchor section by searching for the insertAfter text
+        const searchPattern = section.insertAfter;
+        insertionIndex = documentXml.indexOf(searchPattern);
+        
+        if (insertionIndex === -1) {
+          console.warn(`[OVERRIDE-INSERT]   ⚠️ Anchor "${section.insertAfter}" not found, inserting at end`);
+          insertionIndex = documentXml.lastIndexOf('</w:body>');
+        } else {
+          // Find the end of the paragraph containing the anchor
+          insertionIndex = documentXml.indexOf('</w:p>', insertionIndex) + '</w:p>'.length;
+          console.log(`[OVERRIDE-INSERT]   Found anchor at index: ${insertionIndex}`);
+        }
+      }
+      
+      if (insertionIndex !== -1) {
+        // Insert the section content
+        documentXml = documentXml.substring(0, insertionIndex) + xmlContent + documentXml.substring(insertionIndex);
+        console.log(`[OVERRIDE-INSERT]   ✅ Section inserted successfully`);
+      } else {
+        console.error(`[OVERRIDE-INSERT]   ❌ Failed to find insertion point for section`);
+      }
+    }
+    
+    // Update the document XML in the zip
+    zip.file("word/document.xml", documentXml);
+    console.log("[OVERRIDE-INSERT] ✅ All override sections processed");
+  },
+
+  /**
+   * Convert plain text to DOCX XML format
+   * @param text - Plain text to convert
+   * @returns DOCX XML string
+   */
+  convertTextToDocxXml(text: string): string {
+    // Split text into paragraphs
+    const paragraphs = text.split('\n');
+    
+    // Create XML for each paragraph
+    const xmlParagraphs = paragraphs.map(para => {
+      // Escape XML special characters
+      const escapedText = para
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+      
+      return `<w:p><w:r><w:t xml:space="preserve">${escapedText}</w:t></w:r></w:p>`;
+    });
+    
+    return xmlParagraphs.join('');
   },
 };
 

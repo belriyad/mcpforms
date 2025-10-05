@@ -12,6 +12,8 @@ export interface Template {
   updatedAt: Date;
   parsedAt?: Date;
   errorMessage?: string;
+  etag?: string; // For optimistic locking
+  currentVersion?: number; // Current version number
 }
 
 export interface InsertionPoint {
@@ -70,6 +72,13 @@ export interface Intake {
   clientEmail?: string;
   clientName?: string;
   expiresAt?: Date;
+  versionSnapshot?: {
+    templateVersions: Record<string, number>; // templateId -> version number
+    effectiveSchema?: any[]; // PlaceholderField[] - avoiding circular dependency
+    overrideId?: string;
+    frozenAt: Date;
+    frozenBy?: string;
+  };
 }
 
 // Document types

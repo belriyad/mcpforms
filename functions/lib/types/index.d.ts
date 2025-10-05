@@ -11,6 +11,8 @@ export interface Template {
     updatedAt: Date;
     parsedAt?: Date;
     errorMessage?: string;
+    etag?: string;
+    currentVersion?: number;
 }
 export interface InsertionPoint {
     fieldName: string;
@@ -62,6 +64,13 @@ export interface Intake {
     clientEmail?: string;
     clientName?: string;
     expiresAt?: Date;
+    versionSnapshot?: {
+        templateVersions: Record<string, number>;
+        effectiveSchema?: any[];
+        overrideId?: string;
+        frozenAt: Date;
+        frozenBy?: string;
+    };
 }
 export interface DocumentArtifact {
     id: string;

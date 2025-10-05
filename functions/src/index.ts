@@ -7,6 +7,8 @@ import { serviceManager } from "./services/serviceManager";
 import { intakeManager } from "./services/intakeManager";
 import { documentGenerator } from "./services/documentGenerator";
 import { documentGeneratorAI } from "./services/documentGeneratorAI";
+import * as templateEditorAPI from "./services/templateEditorAPI";
+import * as intakeCustomizationAPI from "./services/intakeCustomizationAPI";
 
 
 
@@ -34,6 +36,8 @@ export const deleteServiceRequest = functions.https.onCall(serviceManager.delete
 
 // Intake Form Management
 export const generateIntakeLink = functions.https.onCall(intakeManager.generateIntakeLink);
+export const generateIntakeLinkWithOverrides = functions.https.onCall(intakeManager.generateIntakeLinkWithOverrides);
+export const getIntakeFormSchema = functions.https.onCall(intakeManager.getIntakeFormSchema);
 export const submitIntakeForm = functions.https.onCall(intakeManager.submitIntakeForm);
 export const approveIntakeForm = functions.https.onCall(intakeManager.approveIntakeForm);
 
@@ -89,6 +93,63 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use("/", intakeManager.intakeFormAPI);
 export const intakeFormAPI = functions.https.onRequest(app);
+
+// ============================================================================
+// TEMPLATE EDITOR APIs
+// ============================================================================
+
+export const listTemplates = functions.https.onCall(templateEditorAPI.listTemplates);
+export const getTemplateWithPlaceholders = functions.https.onCall(templateEditorAPI.getTemplateWithPlaceholders);
+
+export const suggestPlaceholdersAI = functions
+  .runWith({
+    secrets: ["OPENAI_API_KEY"],
+    memory: "512MB",
+    timeoutSeconds: 60
+  })
+  .https.onCall(templateEditorAPI.suggestPlaceholdersAI);
+
+export const saveTemplateDraft = functions.https.onCall(templateEditorAPI.saveTemplateDraft);
+export const approveTemplateVersion = functions.https.onCall(templateEditorAPI.approveTemplateVersion);
+export const rollbackTemplate = functions.https.onCall(templateEditorAPI.rollbackTemplate);
+
+export const acquireTemplateLock = functions.https.onCall(templateEditorAPI.acquireTemplateLock);
+export const releaseTemplateLock = functions.https.onCall(templateEditorAPI.releaseTemplateLock);
+export const refreshTemplateLock = functions.https.onCall(templateEditorAPI.refreshTemplateLock);
+export const checkTemplateLock = functions.https.onCall(templateEditorAPI.checkTemplateLock);
+
+export const getTemplateVersionHistory = functions.https.onCall(templateEditorAPI.getTemplateVersionHistory);
+export const getTemplateAuditTrail = functions.https.onCall(templateEditorAPI.getTemplateAuditTrail);
+export const validatePlaceholders = functions.https.onCall(templateEditorAPI.validatePlaceholders);
+
+// ============================================================================
+// INTAKE CUSTOMIZATION APIs
+// ============================================================================
+
+export const generateCustomClauseAI = functions
+  .runWith({
+    secrets: ["OPENAI_API_KEY"],
+    memory: "512MB",
+    timeoutSeconds: 60
+  })
+  .https.onCall(intakeCustomizationAPI.generateCustomClauseAI);
+
+export const createCustomerOverride = functions.https.onCall(intakeCustomizationAPI.createCustomerOverride);
+export const validateCustomerOverride = functions.https.onCall(intakeCustomizationAPI.validateCustomerOverride);
+export const reviewOverride = functions.https.onCall(intakeCustomizationAPI.reviewOverride);
+
+export const getOverrides = functions.https.onCall(intakeCustomizationAPI.getOverrides);
+export const getEffectiveSchema = functions.https.onCall(intakeCustomizationAPI.getEffectiveSchema);
+export const freezeIntakeVersion = functions.https.onCall(intakeCustomizationAPI.freezeIntakeVersion);
+export const getOverrideSections = functions.https.onCall(intakeCustomizationAPI.getOverrideSections);
+export const hasPendingOverrides = functions.https.onCall(intakeCustomizationAPI.hasPendingOverrides);
+
+export const startIntakeWithOverrides = functions.https.onCall(intakeCustomizationAPI.startIntakeWithOverrides);
+export const getIntakeWithOverrides = functions.https.onCall(intakeCustomizationAPI.getIntakeWithOverrides);
+
+// ============================================================================
+// STORAGE TRIGGERS
+// ============================================================================
 
 // Storage triggers
 export const onTemplateUploaded = functions

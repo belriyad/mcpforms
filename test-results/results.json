@@ -10,9 +10,7 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {
-      "actualWorkers": 1
-    },
+    "metadata": {},
     "preserveOutput": "always",
     "reporter": [
       [
@@ -42,9 +40,7 @@
         "outputDir": "C:/Users/briya/MCPForms/mcpforms/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "chromium",
         "name": "chromium",
         "testDir": "C:/Users/briya/MCPForms/mcpforms/tests",
@@ -52,15 +48,13 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 120000
+        "timeout": 30000
       },
       {
         "outputDir": "C:/Users/briya/MCPForms/mcpforms/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "firefox",
         "name": "firefox",
         "testDir": "C:/Users/briya/MCPForms/mcpforms/tests",
@@ -68,15 +62,13 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 120000
+        "timeout": 30000
       },
       {
         "outputDir": "C:/Users/briya/MCPForms/mcpforms/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {
-          "actualWorkers": 1
-        },
+        "metadata": {},
         "id": "webkit",
         "name": "webkit",
         "testDir": "C:/Users/briya/MCPForms/mcpforms/tests",
@@ -84,7 +76,7 @@
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
         ],
-        "timeout": 120000
+        "timeout": 30000
       }
     ],
     "shard": null,
@@ -94,239 +86,27 @@
     "workers": 6,
     "webServer": null
   },
-  "suites": [
+  "suites": [],
+  "errors": [
     {
-      "title": "complete-workflow-demo.spec.ts",
-      "file": "complete-workflow-demo.spec.ts",
-      "column": 0,
-      "line": 0,
-      "specs": [],
-      "suites": [
-        {
-          "title": "MCPForms - Complete Workflow Automation Demo",
-          "file": "complete-workflow-demo.spec.ts",
-          "line": 6,
-          "column": 6,
-          "specs": [
-            {
-              "title": "Full MCPForms workflow: Template → Service → Form → Documents",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 21263,
-                      "errors": [],
-                      "stdout": [
-                        {
-                          "text": "🚀 Starting complete MCPForms workflow automation...\n"
-                        },
-                        {
-                          "text": "============================================================\n"
-                        },
-                        {
-                          "text": "\n📱 STEP 1: Accessing MCPForms Application\n"
-                        },
-                        {
-                          "text": "----------------------------------------\n"
-                        },
-                        {
-                          "text": "✅ Application loaded: Smart Forms AI - Business Document Generator\n"
-                        },
-                        {
-                          "text": "\n🔐 STEP 2: Admin Dashboard Access\n"
-                        },
-                        {
-                          "text": "----------------------------------------\n"
-                        },
-                        {
-                          "text": "🔍 Checking authentication state...\n"
-                        },
-                        {
-                          "text": "⏳ Authentication loading detected\n"
-                        },
-                        {
-                          "text": "\n📄 STEP 3: Template Management Exploration\n"
-                        },
-                        {
-                          "text": "----------------------------------------\n"
-                        },
-                        {
-                          "text": "📁 Exploring template management features...\n"
-                        },
-                        {
-                          "text": "⚠️ No template management features visible\n"
-                        },
-                        {
-                          "text": "\n⚙️ STEP 4: Service Management Exploration\n"
-                        },
-                        {
-                          "text": "----------------------------------------\n"
-                        },
-                        {
-                          "text": "⚙️ Exploring service management features...\n"
-                        },
-                        {
-                          "text": "⚠️ Service creation interface not visible\n"
-                        },
-                        {
-                          "text": "🎯 Demonstrating service creation process...\n"
-                        },
-                        {
-                          "text": "🏗️ Service configuration completed (demonstration)\n"
-                        },
-                        {
-                          "text": "\n📝 STEP 5: Intake Form System Testing\n"
-                        },
-                        {
-                          "text": "----------------------------------------\n"
-                        },
-                        {
-                          "text": "📋 Testing intake form system...\n"
-                        },
-                        {
-                          "text": "🔗 Testing intake URL: http://localhost:3000/intake/demo-service\n"
-                        },
-                        {
-                          "text": "❌ Intake form failed: demo-service\n"
-                        },
-                        {
-                          "text": "🔗 Testing intake URL: http://localhost:3000/intake/estate-planning\n"
-                        },
-                        {
-                          "text": "⚠️ Intake form not found: estate-planning (Status: 500)\n"
-                        },
-                        {
-                          "text": "🔗 Testing intake URL: http://localhost:3000/intake/test-intake\n"
-                        },
-                        {
-                          "text": "⚠️ Intake form not found: test-intake (Status: 500)\n"
-                        },
-                        {
-                          "text": "\n📋 STEP 6: Document Generation Workflow\n"
-                        },
-                        {
-                          "text": "----------------------------------------\n"
-                        },
-                        {
-                          "text": "📄 Simulating document generation workflow...\n"
-                        },
-                        {
-                          "text": "⚠️ Document generation features not visible\n"
-                        },
-                        {
-                          "text": "\n📑 Expected document types:\n"
-                        },
-                        {
-                          "text": "  • Trust Agreement (PDF/Word)\n"
-                        },
-                        {
-                          "text": "  • Warranty Deed (PDF/Word)\n"
-                        },
-                        {
-                          "text": "  • Certificate of Trust (PDF/Word)\n"
-                        },
-                        {
-                          "text": "  • Client Summary Report (PDF)\n"
-                        },
-                        {
-                          "text": "\n🎉 COMPLETE WORKFLOW DEMONSTRATION FINISHED!\n"
-                        },
-                        {
-                          "text": "============================================================\n"
-                        },
-                        {
-                          "text": "\n📋 WORKFLOW AUTOMATION SUMMARY\n"
-                        },
-                        {
-                          "text": "══════════════════════════════════════════════════\n"
-                        },
-                        {
-                          "text": "✅ Home page navigation\n"
-                        },
-                        {
-                          "text": "✅ Admin dashboard access\n"
-                        },
-                        {
-                          "text": "✅ Template management exploration\n"
-                        },
-                        {
-                          "text": "✅ Service creation simulation\n"
-                        },
-                        {
-                          "text": "✅ Intake form testing\n"
-                        },
-                        {
-                          "text": "✅ Form filling automation\n"
-                        },
-                        {
-                          "text": "✅ Document generation workflow\n"
-                        },
-                        {
-                          "text": "\n🎯 CAPABILITIES DEMONSTRATED:\n"
-                        },
-                        {
-                          "text": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                        },
-                        {
-                          "text": "🔧 Template upload and management\n"
-                        },
-                        {
-                          "text": "⚙️ Service creation and configuration\n"
-                        },
-                        {
-                          "text": "📝 Dynamic form generation\n"
-                        },
-                        {
-                          "text": "🤖 Automated form filling\n"
-                        },
-                        {
-                          "text": "📄 Document generation workflow\n"
-                        },
-                        {
-                          "text": "📸 Complete visual documentation\n"
-                        },
-                        {
-                          "text": "\n💡 This demonstrates the full end-to-end automation\n"
-                        },
-                        {
-                          "text": "   capabilities of MCPForms with Playwright testing!\n"
-                        }
-                      ],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2025-09-29T12:27:29.877Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "5a9da2ae9c344ff8e4d4-eac8d56d15f84df158b7",
-              "file": "complete-workflow-demo.spec.ts",
-              "line": 8,
-              "column": 7
-            }
-          ]
-        }
-      ]
+      "message": "SyntaxError: C:\\Users\\briya\\MCPForms\\mcpforms\\tests\\mcp-ui-components.spec.ts: Unexpected token (1007:0)\n\n\u001b[0m \u001b[90m 1005 |\u001b[39m     })\u001b[33m;\u001b[39m\n \u001b[90m 1006 |\u001b[39m   })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1007 |\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m",
+      "stack": "SyntaxError: C:\\Users\\briya\\MCPForms\\mcpforms\\tests\\mcp-ui-components.spec.ts: Unexpected token (1007:0)\n\n\u001b[0m \u001b[90m 1005 |\u001b[39m     })\u001b[33m;\u001b[39m\n \u001b[90m 1006 |\u001b[39m   })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1007 |\u001b[39m })\u001b[33m;\u001b[39m\n \u001b[90m      |\u001b[39m \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m",
+      "location": {
+        "file": "C:\\Users\\briya\\MCPForms\\mcpforms\\tests\\mcp-ui-components.spec.ts",
+        "line": 1007,
+        "column": 0
+      },
+      "snippet": "\u001b[90m   at \u001b[39mmcp-ui-components.spec.ts:1007\n\n\u001b[0m \u001b[90m 1005 |\u001b[39m     })\u001b[33m;\u001b[39m\n \u001b[90m 1006 |\u001b[39m   })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 1007 |\u001b[39m })\u001b[33m;\u001b[39m\u001b[0m"
+    },
+    {
+      "message": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments.",
+      "stack": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments."
     }
   ],
-  "errors": [],
   "stats": {
-    "startTime": "2025-09-29T12:27:26.798Z",
-    "duration": 27445.739999999998,
-    "expected": 1,
+    "startTime": "2025-10-05T16:44:50.922Z",
+    "duration": 341.45700000000033,
+    "expected": 0,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

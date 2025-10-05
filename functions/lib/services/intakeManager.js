@@ -42,6 +42,7 @@ const functions = __importStar(require("firebase-functions"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const uuid_1 = require("uuid");
+const customerOverrideManager_1 = require("./customerOverrideManager");
 // Initialize Firebase Admin if not already initialized (needed for module loading order)
 if (!admin.apps.length) {
     admin.initializeApp();
@@ -103,6 +104,153 @@ exports.intakeManager = {
         catch (error) {
             console.error("Error generating intake link:", error);
             return { success: false, error: "Failed to generate intake link" };
+        }
+    },
+    /**
+     * Generate intake link with customer overrides and frozen template versions
+     * @param data - Request data with serviceId, customerId, templateIds, and override options
+     * @returns ApiResponse with intakeId and intakeUrl
+     */
+    async generateIntakeLinkWithOverrides(data) {
+        var _a;
+        try {
+            const { serviceId, customerId, templateIds, useApprovedVersions = true, clientEmail, expiresInDays = 30, overrideId } = data;
+            if (!serviceId || !customerId) {
+                return { success: false, error: "Service ID and Customer ID are required" };
+            }
+            // Verify service exists and is active
+            const serviceDoc = await db.collection("services").doc(serviceId).get();
+            if (!serviceDoc.exists) {
+                return { success: false, error: "Service not found" };
+            }
+            const service = serviceDoc.data();
+            if (service.status !== "active") {
+                return { success: false, error: "Service is not active" };
+            }
+            // Use provided templateIds or all templates from service
+            const templatesToUse = templateIds || service.templateIds;
+            if (!templatesToUse || templatesToUse.length === 0) {
+                return { success: false, error: "No templates specified" };
+            }
+            const intakeId = (0, uuid_1.v4)();
+            const linkToken = (0, uuid_1.v4)();
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+            console.log(`🔒 [INTAKE-OVERRIDE] Creating intake with frozen versions for customer ${customerId}`);
+            // Freeze template versions for this intake
+            let versionSnapshot;
+            try {
+                versionSnapshot = await (0, customerOverrideManager_1.freezeIntakeVersion)(intakeId, templatesToUse, useApprovedVersions);
+                // If overrideId is provided, add it to the snapshot
+                if (overrideId) {
+                    versionSnapshot.overrideId = overrideId;
+                    console.log(`🔧 [INTAKE-OVERRIDE] Attached override ${overrideId} to intake`);
+                }
+                console.log(`✅ [INTAKE-OVERRIDE] Frozen ${Object.keys(versionSnapshot.templateVersions).length} template versions`);
+            }
+            catch (freezeError) {
+                console.error(`⚠️ [INTAKE-OVERRIDE] Failed to freeze versions:`, freezeError);
+                return {
+                    success: false,
+                    error: "Failed to freeze template versions: " + (freezeError instanceof Error ? freezeError.message : String(freezeError))
+                };
+            }
+            const intake = {
+                id: intakeId,
+                serviceId,
+                serviceName: service.name,
+                linkToken,
+                clientData: {},
+                status: "link-generated",
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                clientEmail,
+                expiresAt,
+                versionSnapshot
+            };
+            await db.collection("intakes").doc(intakeId).set(intake);
+            // Get base URL from config with fallback
+            const config = functions.config();
+            const baseUrl = ((_a = config.app) === null || _a === void 0 ? void 0 : _a.base_url) || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+            const intakeUrl = `${baseUrl}/intake/${linkToken}`;
+            console.log(`✅ [INTAKE-OVERRIDE] Generated intake link with overrides:`, {
+                intakeId,
+                customerId,
+                frozenVersions: Object.keys(versionSnapshot.templateVersions).length,
+                overrideId: overrideId || 'none',
+                intakeUrl
+            });
+            return {
+                success: true,
+                data: { intakeId, intakeUrl },
+                message: "Intake link generated successfully with frozen template versions",
+            };
+        }
+        catch (error) {
+            console.error("Error generating intake link with overrides:", error);
+            return { success: false, error: "Failed to generate intake link with overrides" };
+        }
+    },
+    /**
+     * Get the form schema for an intake, including customer overrides
+     * @param intakeId - Intake ID
+     * @returns ApiResponse with form fields (merged schema)
+     */
+    async getIntakeFormSchema(intakeId) {
+        var _a;
+        try {
+            if (!intakeId) {
+                return { success: false, error: "Intake ID is required" };
+            }
+            const intakeDoc = await db.collection("intakes").doc(intakeId).get();
+            if (!intakeDoc.exists) {
+                return { success: false, error: "Intake not found" };
+            }
+            const intake = intakeDoc.data();
+            // If intake has version snapshot with overrides, get effective schema
+            if ((_a = intake.versionSnapshot) === null || _a === void 0 ? void 0 : _a.overrideId) {
+                console.log(`📝 [INTAKE-SCHEMA] Getting effective schema for intake ${intakeId} with overrides`);
+                try {
+                    const effectiveSchema = await (0, customerOverrideManager_1.getEffectiveSchema)(intakeId);
+                    console.log(`✅ [INTAKE-SCHEMA] Retrieved effective schema with ${effectiveSchema.length} fields`);
+                    return {
+                        success: true,
+                        data: { formFields: effectiveSchema },
+                        message: "Form schema retrieved with customer overrides"
+                    };
+                }
+                catch (schemaError) {
+                    console.error(`⚠️ [INTAKE-SCHEMA] Failed to get effective schema:`, schemaError);
+                    // Fall back to service schema
+                }
+            }
+            // Fall back to service's master form schema
+            const serviceDoc = await db.collection("services").doc(intake.serviceId).get();
+            if (!serviceDoc.exists) {
+                return { success: false, error: "Service not found" };
+            }
+            const service = serviceDoc.data();
+            // Convert service form fields to placeholder fields format
+            const formFields = service.masterFormJson.map(field => ({
+                field_key: field.name,
+                label: field.label,
+                type: field.type, // Map form field types to placeholder types
+                locations: [], // No specific locations for intake forms
+                required: field.required,
+                description: field.description,
+                options: field.options,
+                validation: field.validation
+            }));
+            console.log(`📝 [INTAKE-SCHEMA] Using service schema with ${formFields.length} fields`);
+            return {
+                success: true,
+                data: { formFields },
+                message: "Form schema retrieved from service"
+            };
+        }
+        catch (error) {
+            console.error("Error getting intake form schema:", error);
+            return { success: false, error: "Failed to get intake form schema" };
         }
     },
     async submitIntakeForm(data) {
