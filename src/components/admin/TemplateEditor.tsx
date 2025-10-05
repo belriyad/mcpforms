@@ -259,69 +259,91 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8">
+          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+        </div>
       </div>
     );
   }
 
   if (!template) {
     return (
-      <div className="flex flex-col items-center justify-center h-96">
-        <AlertCircle className="w-16 h-16 text-red-400 mb-4" />
-        <p className="text-gray-600">Template not found</p>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8">
+          <AlertCircle className="w-16 h-16 text-red-400 mb-4" />
+          <p className="text-gray-600">Template not found</p>
+          {onClose && (
+            <button onClick={onClose} className="mt-4 btn btn-primary">
+              Close
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <FileText className="w-8 h-8 text-blue-600" />
-              <div>
-                <CardTitle>{template.name}</CardTitle>
-                <CardDescription>
-                  {template.originalFileName} • Version {template.currentVersion || 0}
-                </CardDescription>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              {/* Lock Status */}
-              {isLocked && lockHolder === 'you' ? (
-                <Badge variant="default" className="flex items-center space-x-1">
-                  <Lock className="w-3 h-3" />
-                  <span>Editing</span>
-                </Badge>
-              ) : isLocked ? (
-                <Badge variant="destructive" className="flex items-center space-x-1">
-                  <Lock className="w-3 h-3" />
-                  <span>Locked by {lockHolder}</span>
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="flex items-center space-x-1">
-                  <Unlock className="w-3 h-3" />
-                  <span>Available</span>
-                </Badge>
-              )}
-
-              {/* Changes Indicator */}
-              {hasChanges && (
-                <Badge variant="secondary" className="flex items-center space-x-1">
-                  <AlertCircle className="w-3 h-3" />
-                  <span>Unsaved Changes</span>
-                </Badge>
-              )}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+        {/* Modal Header with Close Button */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center space-x-3">
+            <FileText className="w-6 h-6 text-blue-600" />
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">{template.name}</h2>
+              <p className="text-sm text-gray-500">
+                {template.originalFileName} • Version {template.currentVersion || 0}
+              </p>
             </div>
           </div>
-        </CardHeader>
-      </Card>
+          <div className="flex items-center space-x-2">
+            {/* Lock Status */}
+            {isLocked && lockHolder === 'you' ? (
+              <Badge variant="default" className="flex items-center space-x-1">
+                <Lock className="w-3 h-3" />
+                <span>Editing</span>
+              </Badge>
+            ) : isLocked ? (
+              <Badge variant="destructive" className="flex items-center space-x-1">
+                <Lock className="w-3 h-3" />
+                <span>Locked by {lockHolder}</span>
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="flex items-center space-x-1">
+                <Unlock className="w-3 h-3" />
+                <span>Available</span>
+              </Badge>
+            )}
+
+            {/* Changes Indicator */}
+            {hasChanges && (
+              <Badge variant="secondary" className="flex items-center space-x-1">
+                <AlertCircle className="w-3 h-3" />
+                <span>Unsaved Changes</span>
+              </Badge>
+            )}
+            
+            {/* Close Button */}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 p-2"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-6">
 
       {/* Actions Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-2">
           {!isLocked || lockHolder !== 'you' ? (
             <Button onClick={acquireLock} disabled={isLocked && lockHolder !== 'you'}>
@@ -624,6 +646,10 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
           </Card>
         </TabsContent>
       </Tabs>
+      
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
