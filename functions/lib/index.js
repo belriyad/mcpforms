@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.intakeFormAPI = exports.downloadDocument = exports.getDocumentDownloadUrl = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
+exports.onIntakeStatusChange = exports.onTemplateUploaded = exports.intakeFormAPI = exports.downloadDocument = exports.generateDocumentsWithAI = exports.getDocumentDownloadUrl = exports.generateDocumentsFromIntake = exports.approveIntakeForm = exports.submitIntakeForm = exports.generateIntakeLink = exports.deleteServiceRequest = exports.updateServiceRequest = exports.createServiceRequest = exports.processUploadedTemplate = exports.uploadTemplateAndParse = void 0;
 const functions = __importStar(require("firebase-functions"));
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
@@ -44,6 +44,7 @@ const templateParser_1 = require("./services/templateParser");
 const serviceManager_1 = require("./services/serviceManager");
 const intakeManager_1 = require("./services/intakeManager");
 const documentGenerator_1 = require("./services/documentGenerator");
+const documentGeneratorAI_1 = require("./services/documentGeneratorAI");
 // Template Upload and AI Parsing
 exports.uploadTemplateAndParse = functions
     .runWith({
@@ -70,6 +71,17 @@ exports.approveIntakeForm = functions.https.onCall(intakeManager_1.intakeManager
 // Document Generation
 exports.generateDocumentsFromIntake = functions.https.onCall(documentGenerator_1.documentGenerator.generateDocuments);
 exports.getDocumentDownloadUrl = functions.https.onCall(documentGenerator_1.documentGenerator.getDownloadUrl);
+// Document Generation (AI-Powered - New Approach)
+exports.generateDocumentsWithAI = functions
+    .runWith({
+    secrets: ["OPENAI_API_KEY"],
+    memory: "1GB",
+    timeoutSeconds: 300
+})
+    .https.onCall(async (data, context) => {
+    const { intakeId, regenerate } = data;
+    return await documentGeneratorAI_1.documentGeneratorAI.generateDocumentsFromIntake(intakeId, regenerate);
+});
 // HTTP endpoint for downloading documents
 exports.downloadDocument = functions.https.onRequest(async (req, res) => {
     try {

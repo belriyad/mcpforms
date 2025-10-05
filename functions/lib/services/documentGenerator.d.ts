@@ -3,6 +3,7 @@ export declare const documentGenerator: {
     generateDocuments(data: {
         intakeId: string;
         regenerate?: boolean;
+        useAI?: boolean;
     }): Promise<ApiResponse<{
         artifactIds: string[];
     }>>;

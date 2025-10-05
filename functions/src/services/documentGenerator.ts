@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { v4 as uuidv4 } from "uuid";
 import { Intake, Service, Template, DocumentArtifact, ApiResponse } from "../types";
+import { documentGeneratorAI } from "./documentGeneratorAI";
 
 // Initialize Firebase Admin if not already initialized (needed for module loading order)
 if (!admin.apps.length) {
@@ -11,14 +12,39 @@ const db = admin.firestore();
 const storage = admin.storage();
 
 export const documentGenerator = {
-  async generateDocuments(data: { intakeId: string; regenerate?: boolean }): Promise<ApiResponse<{ artifactIds: string[] }>> {
+  async generateDocuments(data: { intakeId: string; regenerate?: boolean; useAI?: boolean }): Promise<ApiResponse<{ artifactIds: string[] }>> {
     try {
-      const { intakeId, regenerate = false } = data;
+      const { intakeId, regenerate = false, useAI = true } = data; // AI by default
 
       if (!intakeId) {
         return { success: false, error: "Intake ID is required" };
       }
 
+      console.log(`📋 [DOC-GEN] Starting document generation for intake ${intakeId}`);
+      console.log(`🤖 [DOC-GEN] Using AI generation: ${useAI}`);
+
+      // Try AI generation first (if enabled)
+      if (useAI) {
+        try {
+          console.log(`🤖 [DOC-GEN] Attempting AI-powered document generation...`);
+          const aiResult = await documentGeneratorAI.generateDocumentsFromIntake(intakeId, regenerate);
+          
+          if (aiResult.success) {
+            console.log(`✅ [DOC-GEN] AI generation successful!`);
+            return aiResult;
+          } else {
+            console.log(`⚠️ [DOC-GEN] AI generation failed: ${aiResult.error}`);
+            console.log(`🔄 [DOC-GEN] Falling back to placeholder replacement method...`);
+          }
+        } catch (aiError) {
+          console.error(`❌ [DOC-GEN] AI generation error:`, aiError);
+          console.log(`🔄 [DOC-GEN] Falling back to placeholder replacement method...`);
+        }
+      }
+
+      // Fallback to traditional placeholder replacement method
+      console.log(`📝 [DOC-GEN] Using placeholder replacement method...`);
+      
       // Get intake details
       const intakeDoc = await db.collection("intakes").doc(intakeId).get();
       if (!intakeDoc.exists) {
@@ -88,7 +114,7 @@ export const documentGenerator = {
       return {
         success: true,
         data: { artifactIds },
-        message: `Successfully ${regenerate ? 'regenerated' : 'generated'} ${artifactIds.length} documents`,
+        message: `Successfully ${regenerate ? 'regenerated' : 'generated'} ${artifactIds.length} documents using placeholder replacement (AI fallback)`,
       };
     } catch (error) {
       console.error("Error generating documents:", error);

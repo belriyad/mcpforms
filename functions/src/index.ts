@@ -6,6 +6,7 @@ import { templateParser } from "./services/templateParser";
 import { serviceManager } from "./services/serviceManager";
 import { intakeManager } from "./services/intakeManager";
 import { documentGenerator } from "./services/documentGenerator";
+import { documentGeneratorAI } from "./services/documentGeneratorAI";
 
 
 
@@ -39,6 +40,18 @@ export const approveIntakeForm = functions.https.onCall(intakeManager.approveInt
 // Document Generation
 export const generateDocumentsFromIntake = functions.https.onCall(documentGenerator.generateDocuments);
 export const getDocumentDownloadUrl = functions.https.onCall(documentGenerator.getDownloadUrl);
+
+// Document Generation (AI-Powered - New Approach)
+export const generateDocumentsWithAI = functions
+  .runWith({
+    secrets: ["OPENAI_API_KEY"],
+    memory: "1GB",
+    timeoutSeconds: 300
+  })
+  .https.onCall(async (data, context) => {
+    const { intakeId, regenerate } = data;
+    return await documentGeneratorAI.generateDocumentsFromIntake(intakeId, regenerate);
+  });
 
 // HTTP endpoint for downloading documents
 export const downloadDocument = functions.https.onRequest(async (req, res) => {
