@@ -216,6 +216,16 @@ export default function ServiceManager() {
                   
                   <div className="flex items-center space-x-2">
                     <button
+                      onClick={() => window.location.href = `/admin/services/${service.id}/edit`}
+                      className="btn btn-sm btn-outline"
+                      title="Edit service intake fields"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit Fields
+                    </button>
+                    <button
                       onClick={() => toggleServiceStatus(service.id, service.status)}
                       className={`btn btn-sm ${service.status === 'active' ? 'btn-outline' : 'btn-primary'}`}
                     >
