@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { LoadingSpinner, ProgressIndicator } from '@/components/ui/loading-components'
+import { showSuccessToast, showErrorToast } from '@/lib/toast-helpers'
 import CustomerCustomization from '@/components/intake/CustomerCustomization'
+import { Shield, Lock, Save, CheckCircle, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface FormField {
@@ -51,8 +53,24 @@ export default function IntakeFormPage() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [customFields, setCustomFields] = useState<any[]>([])
   const [customClauses, setCustomClauses] = useState<any[]>([])
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm()
+
+  // Calculate form completion progress
+  const formData = watch()
+  const completionPercentage = useMemo(() => {
+    if (!intakeData?.formFields) return 0
+    const requiredFields = intakeData.formFields.filter(f => f.required)
+    if (requiredFields.length === 0) return 100
+    
+    const filledFields = requiredFields.filter(field => {
+      const value = formData[field.name]
+      return value && value !== ''
+    })
+    
+    return Math.round((filledFields.length / requiredFields.length) * 100)
+  }, [formData, intakeData])
 
   useEffect(() => {
     fetchIntakeData()
@@ -160,6 +178,7 @@ export default function IntakeFormPage() {
         }),
       })
       console.log('✅ Progress saved successfully')
+      setLastSaved(new Date())
     } catch (err) {
       console.error('Error saving progress:', err)
     }
@@ -202,7 +221,7 @@ export default function IntakeFormPage() {
       console.log('✅ Submit result:', result)
 
       if (result.success) {
-        toast.success('Form submitted successfully!')
+        showSuccessToast('Form submitted successfully!')
         // Set submitted flag immediately to stop all auto-save
         setIsSubmitted(true)
         // Update local status immediately
@@ -212,11 +231,11 @@ export default function IntakeFormPage() {
         // Refresh data to show updated status
         await fetchIntakeData()
       } else {
-        toast.error(result.error || 'Failed to submit form')
+        showErrorToast(result.error || 'Failed to submit form')
       }
     } catch (err) {
       console.error('Error submitting form:', err)
-      toast.error('Failed to submit form')
+      showErrorToast('Failed to submit form')
     } finally {
       setSubmitting(false)
     }
@@ -353,13 +372,37 @@ export default function IntakeFormPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-2xl mx-auto px-4">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900">{intakeData.serviceName}</h1>
-          <p className="text-gray-600 mt-2">{intakeData.serviceDescription}</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">{intakeData.serviceName}</h1>
+          <p className="text-gray-600 mb-6">{intakeData.serviceDescription}</p>
+          
+          {/* Progress Indicator */}
+          {!isSubmitted && (
+            <div className="mb-4">
+              <ProgressIndicator 
+                progress={completionPercentage} 
+                total={100}
+                label={`Form Progress`}
+                showPercentage={true}
+              />
+            </div>
+          )}
+          
+          {/* Auto-save Indicator */}
+          {!isSubmitted && lastSaved && (
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-4">
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span>Auto-saved {lastSaved.toLocaleTimeString()}</span>
+            </div>
+          )}
+          
           {isSubmitted && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 font-medium">
-                ✓ Form submitted successfully! We'll review your information and get back to you soon.
-              </p>
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
+              <div className="flex items-center justify-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <p className="text-green-800 font-medium">
+                  Form submitted successfully! We'll review your information and get back to you soon.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -368,11 +411,19 @@ export default function IntakeFormPage() {
           <div className="card-content">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {intakeData.formFields && intakeData.formFields.length > 0 ? (
-                intakeData.formFields.map((field) => (
-                  <div key={field.id}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                intakeData.formFields.map((field) => {
+                  const fieldValue = formData[field.name]
+                  const isFieldFilled = fieldValue && fieldValue !== ''
+                  const hasError = errors[field.name]
+                  
+                  return (
+                  <div key={field.id} className="relative">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
                       {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                      {field.required && <span className="text-red-500">*</span>}
+                      {field.required && isFieldFilled && !hasError && (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      )}
                     </label>
                     
                     {field.description && (
@@ -382,12 +433,15 @@ export default function IntakeFormPage() {
                     {renderField(field)}
                     
                     {errors[field.name] && (
-                      <p className="text-sm text-red-600 mt-1">
-                        {errors[field.name]?.message as string}
-                      </p>
+                      <div className="flex items-center gap-1 mt-2 animate-slide-in">
+                        <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        <p className="text-sm text-red-600">
+                          {errors[field.name]?.message as string}
+                        </p>
+                      </div>
                     )}
                   </div>
-                ))
+                )})
               ) : (
                 <div className="text-center py-8">
                   <div className="text-gray-500">
@@ -410,25 +464,47 @@ export default function IntakeFormPage() {
                 />
               )}
 
-              <div className="pt-6 border-t">
-                <div className="flex justify-between items-center">
-                  <p className="text-sm text-gray-500">
-                    Progress is automatically saved
-                  </p>
-                  
+              <div className="pt-6 border-t space-y-4">
+                {/* Trust Badges */}
+                <div className="flex flex-wrap items-center justify-center gap-6 py-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Shield className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <span className="font-medium">Secure & Encrypted</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <Lock className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <span className="font-medium">GDPR Compliant</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <Save className="w-4 h-4 text-green-600" />
+                    </div>
+                    <span className="font-medium">Auto-Saved</span>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <div className="flex justify-center">
                   {!isSubmitted && (
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="btn btn-primary"
+                      className="btn btn-primary px-8 py-3 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover-scale disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       {submitting ? (
                         <>
                           <LoadingSpinner size="sm" />
-                          <span className="ml-2">Submitting...</span>
+                          <span>Submitting...</span>
                         </>
                       ) : (
-                        'Submit Form'
+                        <>
+                          <CheckCircle className="w-5 h-5" />
+                          <span>Submit Form</span>
+                        </>
                       )}
                     </button>
                   )}
