@@ -1,7 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { Service } from '@/types/service'
 import { 
   ArrowLeft,
   FileText,
@@ -18,57 +21,46 @@ import {
   Trash2,
   Send,
   FileCheck,
-  Package
+  Package,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
-
-// Mock service data
-const MOCK_SERVICE = {
-  id: 'service_1',
-  name: 'Will Preparation',
-  clientName: 'John Doe',
-  clientEmail: 'john@example.com',
-  description: 'Estate planning with charitable donation clause',
-  status: 'intake_sent',
-  createdAt: '2025-10-04',
-  lastUpdated: '2 hours ago',
-  templates: [
-    {
-      id: 'template_1',
-      name: 'Will Template',
-      fileName: 'will_template.docx',
-      aiSections: 1
-    },
-    {
-      id: 'template_2',
-      name: 'Agency Contract',
-      fileName: 'agency_contract.docx',
-      aiSections: 0
-    },
-    {
-      id: 'template_3',
-      name: 'Disclaimer Agreement',
-      fileName: 'disclaimer.docx',
-      aiSections: 0
-    }
-  ],
-  intakeForm: {
-    totalFields: 28,
-    mergedFields: 18,
-    duplicatesRemoved: 10,
-    link: 'https://formgenai-4545.web.app/intake/abc123',
-    sentAt: '2025-10-06 10:30 AM',
-    status: 'sent'
-  },
-  clientResponse: null, // null = waiting, {} = submitted
-  generatedDocuments: null // null = not generated, [] = generated
-}
 
 export default function ServiceDetailPage({ params }: { params: { serviceId: string } }) {
   const router = useRouter()
-  const [service] = useState(MOCK_SERVICE)
+  const [service, setService] = useState<Service | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showIntakePreview, setShowIntakePreview] = useState(false)
 
+  // Load service from Firestore with real-time updates
+  useEffect(() => {
+    const serviceRef = doc(db, 'services', params.serviceId)
+    
+    const unsubscribe = onSnapshot(
+      serviceRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setService({ id: docSnap.id, ...docSnap.data() } as Service)
+          setError(null)
+        } else {
+          setError('Service not found')
+        }
+        setLoading(false)
+      },
+      (err) => {
+        console.error('Error loading service:', err)
+        setError('Failed to load service')
+        setLoading(false)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [params.serviceId])
+
   const getStatusBadge = () => {
+    if (!service) return null
+    
     const statusConfig = {
       draft: { label: 'Draft', color: 'gray', icon: Edit },
       intake_sent: { label: 'Intake Sent', color: 'blue', icon: Mail },
@@ -97,12 +89,51 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   }
 
   const handleResendIntake = () => {
+    if (!service) return
     alert('Intake form link resent to ' + service.clientEmail)
   }
 
   const handleGenerateDocuments = () => {
     // This would trigger document generation
     alert('Document generation started!')
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading service details...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error || !service) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="max-w-md w-full mx-4">
+          <div className="bg-white rounded-xl p-8 shadow-lg border border-red-200">
+            <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
+              {error || 'Service Not Found'}
+            </h2>
+            <p className="text-gray-600 text-center mb-6">
+              The service you're looking for doesn't exist or you don't have access to it.
+            </p>
+            <button
+              onClick={() => router.push('/admin/services')}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium"
+            >
+              <ArrowLeft className="w-4 h-4 inline mr-2" />
+              Back to Services
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -134,7 +165,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                 <span>•</span>
                 <span className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
-                  Created {service.createdAt}
+                  Created {service.createdAt ? new Date(service.createdAt as any).toLocaleDateString() : 'Unknown'}
                 </span>
               </div>
               {getStatusBadge()}
@@ -173,7 +204,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
           </h2>
 
           <div className="space-y-3">
-            {service.templates.map((template) => (
+            {service.templates?.map((template) => (
               <div
                 key={template.id}
                 className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-all"
@@ -188,10 +219,10 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {template.aiSections > 0 && (
+                    {template.aiSections && template.aiSections.length > 0 && (
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
                         <Sparkles className="w-3 h-3" />
-                        {template.aiSections} AI section{template.aiSections !== 1 ? 's' : ''}
+                        {template.aiSections.length} AI section{template.aiSections.length !== 1 ? 's' : ''}
                       </span>
                     )}
                     <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
@@ -210,82 +241,91 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         </div>
 
         {/* Intake Form Section */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <FileCheck className="w-5 h-5" />
-            Intake Form
-          </h2>
+        {service.intakeForm && (
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <FileCheck className="w-5 h-5" />
+              Intake Form
+            </h2>
 
-          <div className="space-y-4">
-            {/* Form Stats */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-blue-700 mb-3">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="font-medium">Unified Intake Form Generated</span>
-              </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-600">Total Fields</p>
-                  <p className="text-lg font-semibold text-gray-900">{service.intakeForm.totalFields}</p>
+            <div className="space-y-4">
+              {/* Form Stats */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-blue-700 mb-3">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">Unified Intake Form Generated</span>
                 </div>
-                <div>
-                  <p className="text-gray-600">Merged to</p>
-                  <p className="text-lg font-semibold text-gray-900">{service.intakeForm.mergedFields}</p>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Total Fields</p>
+                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.totalFields}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Unique Fields</p>
+                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.uniqueFields}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Duplicates Removed</p>
+                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.duplicatesRemoved}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-600">Duplicates Removed</p>
-                  <p className="text-lg font-semibold text-gray-900">{service.intakeForm.duplicatesRemoved}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Form Link */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-700 mb-1">Status</p>
-                  <p className="text-sm text-gray-600">Sent to client on {service.intakeForm.sentAt}</p>
-                </div>
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  <Send className="w-3 h-3" />
-                  Sent
-                </span>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                <p className="text-sm text-gray-600 mb-2">Intake Form Link:</p>
+              {/* Form Link */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Status</p>
+                    <p className="text-sm text-gray-600">
+                      {service.intakeFormSentAt 
+                        ? `Sent to client on ${new Date(service.intakeFormSentAt as any).toLocaleString()}`
+                        : 'Ready to send'
+                      }
+                    </p>
+                  </div>
+                  {service.status === 'intake_sent' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                      <Send className="w-3 h-3" />
+                      Sent
+                    </span>
+                  )}
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                  <p className="text-sm text-gray-600 mb-2">Intake Form Link:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-sm bg-white px-3 py-2 rounded border border-gray-200 font-mono break-all">
+                      {service.intakeForm.link}
+                    </code>
+                    <button
+                      onClick={() => window.open(service.intakeForm?.link, '_blank')}
+                      className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-sm bg-white px-3 py-2 rounded border border-gray-200 font-mono">
-                    {service.intakeForm.link}
-                  </code>
                   <button
-                    onClick={() => window.open(service.intakeForm.link, '_blank')}
-                    className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    onClick={() => setShowIntakePreview(!showIntakePreview)}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                   >
-                    <ExternalLink className="w-4 h-4" />
+                    <Eye className="w-4 h-4 inline mr-2" />
+                    View Form
+                  </button>
+                  <button
+                    onClick={handleResendIntake}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    <Mail className="w-4 h-4 inline mr-2" />
+                    Resend Link
                   </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowIntakePreview(!showIntakePreview)}
-                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-                >
-                  <Eye className="w-4 h-4 inline mr-2" />
-                  View Form
-                </button>
-                <button
-                  onClick={handleResendIntake}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
-                  <Mail className="w-4 h-4 inline mr-2" />
-                  Resend Link
-                </button>
-              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Client Response Section */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
@@ -399,7 +439,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
 
         {/* Last Updated */}
         <div className="text-center text-sm text-gray-500">
-          Last updated {service.lastUpdated}
+          Last updated {service.updatedAt ? new Date(service.updatedAt as any).toLocaleString() : 'Unknown'}
         </div>
       </div>
     </div>
