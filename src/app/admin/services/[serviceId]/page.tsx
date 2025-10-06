@@ -395,7 +395,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         </div>
 
         {/* Document Generation Section */}
-        {service.clientResponse && service.clientResponse.status === 'submitted' && (
+        {service.clientResponse && (service.clientResponse.status === 'submitted' || service.status === 'intake_submitted') && (
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Package className="w-5 h-5" />
