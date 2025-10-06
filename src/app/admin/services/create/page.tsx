@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { 
   ArrowLeft,
   ArrowRight,
@@ -11,46 +13,29 @@ import {
   Mail,
   Sparkles,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Loader2
 } from 'lucide-react'
+import { showSuccessToast, showErrorToast, showLoadingToast } from '@/lib/toast-helpers'
+import toast from 'react-hot-toast'
 
-// Mock template data
-const MOCK_TEMPLATES = [
-  {
-    id: 'template_1',
-    name: 'Will Template',
-    description: 'Standard last will and testament',
-    fieldCount: 15,
-    lastUsed: '2 days ago'
-  },
-  {
-    id: 'template_2',
-    name: 'Agency Contract',
-    description: 'Power of attorney agreement',
-    fieldCount: 8,
-    lastUsed: '5 days ago'
-  },
-  {
-    id: 'template_3',
-    name: 'Disclaimer Agreement',
-    description: 'Liability waiver and disclaimer',
-    fieldCount: 5,
-    lastUsed: '1 week ago'
-  },
-  {
-    id: 'template_4',
-    name: 'Employment Contract',
-    description: 'Standard employment agreement',
-    fieldCount: 12,
-    lastUsed: '2 weeks ago'
-  }
-]
+interface Template {
+  id: string
+  name: string
+  description?: string
+  extractedFields?: any[]
+  status: string
+  updatedAt?: any
+}
 
 type Step = 1 | 2 | 3 | 4
 
 export default function CreateServicePage() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState<Step>(1)
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [templates, setTemplates] = useState<Template[]>([])
   
   // Step 1: Service Details
   const [serviceName, setServiceName] = useState('')
@@ -61,9 +46,36 @@ export default function CreateServicePage() {
   // Step 2: Template Selection
   const [selectedTemplates, setSelectedTemplates] = useState<Set<string>>(new Set())
   
-  // Step 3: Would be template customization (placeholder for now)
+  // Step 3: AI Customization (templates with AI sections)
+  const [aiSections, setAiSections] = useState<Record<string, {prompt: string, generating: boolean}>>({})
   
-  // Step 4: Would be intake form review (placeholder for now)
+  // Step 4: Intake form preview
+  const [intakeForm, setIntakeForm] = useState<any>(null)
+  const [generatingIntake, setGeneratingIntake] = useState(false)
+
+  // Load templates from Firestore
+  useEffect(() => {
+    const templatesQuery = query(
+      collection(db, 'templates'),
+      where('status', '==', 'parsed')
+    )
+    
+    const unsubscribe = onSnapshot(templatesQuery, (snapshot) => {
+      const templatesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Template[]
+      
+      setTemplates(templatesData)
+      setLoading(false)
+    }, (error) => {
+      console.error('Error loading templates:', error)
+      showErrorToast('Failed to load templates')
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [])
 
   const steps = [
     { number: 1, label: 'Service Details', icon: User },
@@ -99,13 +111,70 @@ export default function CreateServicePage() {
     }
   }
 
-  const handleFinish = () => {
-    // For now, just navigate to services with a mock ID
-    router.push('/admin/services/service_new')
+  const handleFinish = async () => {
+    setCreating(true)
+    const loadingToastId = showLoadingToast('Creating service...')
+    
+    try {
+      // Step 1: Create service
+      const serviceData = {
+        name: serviceName,
+        clientName,
+        clientEmail,
+        description,
+        templateIds: Array.from(selectedTemplates)
+      }
+      
+      const createResult = await fetch('/api/services/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serviceData)
+      })
+      
+      if (!createResult.ok) {
+        throw new Error('Failed to create service')
+      }
+      
+      const { serviceId } = await createResult.json()
+      
+      // Step 2: Load templates
+      await fetch('/api/services/load-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceId, templateIds: Array.from(selectedTemplates) })
+      })
+      
+      // Step 3: Generate intake form
+      await fetch('/api/services/generate-intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceId })
+      })
+      
+      // Step 4: Send intake form
+      await fetch('/api/services/send-intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceId })
+      })
+      
+      toast.dismiss(loadingToastId)
+      showSuccessToast('Service created and intake form sent!')
+      router.push(`/admin/services/${serviceId}`)
+    } catch (error) {
+      toast.dismiss(loadingToastId)
+      console.error('Error creating service:', error)
+      showErrorToast(error instanceof Error ? error.message : 'Failed to create service')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const totalFields = Array.from(selectedTemplates)
-    .map(id => MOCK_TEMPLATES.find(t => t.id === id)?.fieldCount || 0)
+    .map(id => {
+      const template = templates.find(t => t.id === id)
+      return template?.extractedFields?.length || 0
+    })
     .reduce((sum, count) => sum + count, 0)
 
   return (
@@ -261,44 +330,57 @@ export default function CreateServicePage() {
               )}
 
               <div className="space-y-3">
-                {MOCK_TEMPLATES.map((template) => {
-                  const isSelected = selectedTemplates.has(template.id)
-                  
-                  return (
-                    <div
-                      key={template.id}
-                      onClick={() => toggleTemplate(template.id)}
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        isSelected
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                              isSelected
-                                ? 'border-blue-500 bg-blue-500'
-                                : 'border-gray-300 bg-white'
-                            }`}
-                          >
-                            {isSelected && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900 mb-1">{template.name}</h3>
-                            <p className="text-sm text-gray-600 mb-2">{template.description}</p>
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
-                              <span>{template.fieldCount} fields</span>
-                              <span>•</span>
-                              <span>Last used {template.lastUsed}</span>
+                {loading ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+                    <p className="text-gray-600">Loading templates...</p>
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No templates available. Please upload templates first.
+                  </div>
+                ) : (
+                  templates.map((template) => {
+                    const isSelected = selectedTemplates.has(template.id)
+                    const fieldCount = template.extractedFields?.length || 0
+                    const lastUpdated = template.updatedAt?.toDate?.()?.toLocaleDateString() || 'Recently'
+                    
+                    return (
+                      <div
+                        key={template.id}
+                        onClick={() => toggleTemplate(template.id)}
+                        className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-500'
+                                  : 'border-gray-300 bg-white'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-gray-900 mb-1">{template.name}</h3>
+                              <p className="text-sm text-gray-600 mb-2">{template.description || 'No description'}</p>
+                              <div className="flex items-center gap-4 text-sm text-gray-500">
+                                <span>{fieldCount} fields</span>
+                                <span>•</span>
+                                <span>Last updated {lastUpdated}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
               </div>
             </div>
           )}
@@ -313,7 +395,7 @@ export default function CreateServicePage() {
 
               <div className="space-y-4">
                 {Array.from(selectedTemplates).map((templateId) => {
-                  const template = MOCK_TEMPLATES.find(t => t.id === templateId)
+                  const template = templates.find(t => t.id === templateId)
                   if (!template) return null
                   
                   return (
@@ -396,15 +478,14 @@ export default function CreateServicePage() {
                     </div>
 
                     {Array.from(selectedTemplates).map((templateId) => {
-                      const template = MOCK_TEMPLATES.find(t => t.id === templateId)
+                      const template = templates.find(t => t.id === templateId)
                       if (!template) return null
                       
                       return (
                         <div key={templateId}>
                           <p className="font-medium text-gray-700 mb-2">{template.name} - Specific Fields</p>
                           <ul className="space-y-1 ml-4 text-gray-600">
-                            <li>• Field 1 for {template.name}</li>
-                            <li>• Field 2 for {template.name}</li>
+                            <li>• {template.extractedFields?.length || 0} fields from this template</li>
                           </ul>
                         </div>
                       )
@@ -481,10 +562,20 @@ export default function CreateServicePage() {
           ) : (
             <button
               onClick={handleFinish}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
+              disabled={creating}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Mail className="w-5 h-5" />
-              Create & Send to Client
+              {creating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Mail className="w-5 h-5" />
+                  Create & Send to Client
+                </>
+              )}
             </button>
           )}
         </div>

@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { 
   Plus, 
   FileText, 
@@ -12,7 +14,8 @@ import {
   Edit,
   Download,
   Mail,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react'
 
 interface Service {
@@ -21,45 +24,10 @@ interface Service {
   clientName: string
   clientEmail: string
   status: 'draft' | 'intake_sent' | 'intake_submitted' | 'documents_ready' | 'completed'
-  templateCount: number
-  createdAt: string
-  intakeLink?: string
-  lastUpdated: string
+  templates?: any[]
+  createdAt: any
+  updatedAt: any
 }
-
-const MOCK_SERVICES: Service[] = [
-  {
-    id: 'service_1',
-    name: 'Will Preparation',
-    clientName: 'John Doe',
-    clientEmail: 'john@example.com',
-    status: 'intake_sent',
-    templateCount: 3,
-    createdAt: '2025-10-04',
-    intakeLink: '/intake/abc123',
-    lastUpdated: '2 hours ago'
-  },
-  {
-    id: 'service_2',
-    name: 'Business Contract',
-    clientName: 'Acme Corporation',
-    clientEmail: 'legal@acme.com',
-    status: 'documents_ready',
-    templateCount: 2,
-    createdAt: '2025-10-02',
-    lastUpdated: '1 day ago'
-  },
-  {
-    id: 'service_3',
-    name: 'Employment Agreement',
-    clientName: 'Jane Smith',
-    clientEmail: 'jane@example.com',
-    status: 'draft',
-    templateCount: 1,
-    createdAt: '2025-10-06',
-    lastUpdated: '30 minutes ago'
-  }
-]
 
 const STATUS_CONFIG = {
   draft: { label: 'Draft', color: 'gray', icon: Edit },
@@ -71,8 +39,32 @@ const STATUS_CONFIG = {
 
 export default function ServicesPage() {
   const router = useRouter()
-  const [services] = useState<Service[]>(MOCK_SERVICES)
+  const [services, setServices] = useState<Service[]>([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | Service['status']>('all')
+
+  // Load services from Firestore
+  useEffect(() => {
+    const servicesQuery = query(
+      collection(db, 'services'),
+      orderBy('createdAt', 'desc')
+    )
+    
+    const unsubscribe = onSnapshot(servicesQuery, (snapshot) => {
+      const servicesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Service[]
+      
+      setServices(servicesData)
+      setLoading(false)
+    }, (error) => {
+      console.error('Error loading services:', error)
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [])
 
   const filteredServices = filter === 'all' 
     ? services 
@@ -118,6 +110,13 @@ export default function ServicesPage() {
         </div>
 
         {/* Stats Cards */}
+        {loading ? (
+          <div className="bg-white rounded-xl p-12 shadow-sm border border-gray-200 mb-8 text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-gray-600">Loading services...</p>
+          </div>
+        ) : (
+          <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
@@ -228,12 +227,12 @@ export default function ServicesPage() {
                     <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
                       <span className="flex items-center gap-1">
                         <FileText className="w-4 h-4" />
-                        {service.templateCount} template{service.templateCount !== 1 ? 's' : ''}
+                        {service.templates?.length || 0} template{(service.templates?.length || 0) !== 1 ? 's' : ''}
                       </span>
                       <span>•</span>
                       <span>Client: {service.clientName}</span>
                       <span>•</span>
-                      <span>Updated {service.lastUpdated}</span>
+                      <span>Updated {service.updatedAt?.toDate?.()?.toLocaleDateString() || 'Recently'}</span>
                     </div>
                     <p className="text-sm text-gray-500">{service.clientEmail}</p>
                   </div>
@@ -272,6 +271,8 @@ export default function ServicesPage() {
             ))
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   )
