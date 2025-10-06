@@ -32,6 +32,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showIntakePreview, setShowIntakePreview] = useState(false)
+  const [generatingDocs, setGeneratingDocs] = useState(false)
 
   // Load service from Firestore with real-time updates
   useEffect(() => {
@@ -93,9 +94,33 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
     alert('Intake form link resent to ' + service.clientEmail)
   }
 
-  const handleGenerateDocuments = () => {
-    // This would trigger document generation
-    alert('Document generation started!')
+  const handleGenerateDocuments = async () => {
+    if (!service) return
+    
+    setGeneratingDocs(true)
+    try {
+      const response = await fetch('/api/services/generate-documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ serviceId: service.id }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        alert(`✅ Successfully generated ${result.documents.length} documents!`)
+        // Service will update automatically via onSnapshot
+      } else {
+        alert(`❌ Error: ${result.error}`)
+      }
+    } catch (err) {
+      console.error('Error generating documents:', err)
+      alert('❌ Failed to generate documents')
+    } finally {
+      setGeneratingDocs(false)
+    }
   }
 
   // Loading state
@@ -347,7 +372,11 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 text-green-700 mb-2">
                   <CheckCircle2 className="w-5 h-5" />
-                  <span className="font-medium">Form Submitted on Oct 6, 2025 3:45 PM</span>
+                  <span className="font-medium">
+                    Form Submitted on {service.clientResponse.submittedAt 
+                      ? new Date(service.clientResponse.submittedAt as any).toLocaleString() 
+                      : 'Recently'}
+                  </span>
                 </div>
               </div>
 
@@ -366,14 +395,14 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         </div>
 
         {/* Document Generation Section */}
-        {service.clientResponse && (
+        {service.clientResponse && service.clientResponse.status === 'submitted' && (
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Package className="w-5 h-5" />
               Document Generation
             </h2>
 
-            {!service.generatedDocuments ? (
+            {!service.generatedDocuments || service.generatedDocuments.length === 0 ? (
               <div className="space-y-4">
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6 text-center">
                   <FileCheck className="w-12 h-12 text-green-600 mx-auto mb-3" />
@@ -383,16 +412,26 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                   </p>
                   <button
                     onClick={handleGenerateDocuments}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
+                    disabled={generatingDocs}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Sparkles className="w-5 h-5" />
-                    Generate All Documents
+                    {generatingDocs ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5" />
+                        Generate All Documents
+                      </>
+                    )}
                   </button>
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
-                    <strong>What will be generated:</strong> {service.templates.length} final documents with all intake data populated and AI-generated sections included.
+                    <strong>What will be generated:</strong> {service.templates?.length || 0} final documents with all intake data populated and AI-generated sections included.
                   </p>
                 </div>
               </div>
@@ -401,26 +440,34 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 text-green-700 mb-2">
                     <CheckCircle2 className="w-5 h-5" />
-                    <span className="font-medium">Documents generated on Oct 6, 2025 4:00 PM</span>
+                    <span className="font-medium">
+                      Documents generated on {service.documentsGeneratedAt 
+                        ? new Date(service.documentsGeneratedAt as any).toLocaleString() 
+                        : 'Recently'}
+                    </span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  {service.templates.map((template) => (
+                  {service.generatedDocuments?.map((doc: any) => (
                     <div
-                      key={template.id}
+                      key={doc.id}
                       className="flex items-center justify-between border border-gray-200 rounded-lg p-4"
                     >
                       <div className="flex items-center gap-3">
                         <FileText className="w-5 h-5 text-blue-600" />
                         <div>
-                          <h4 className="font-medium text-gray-900">
-                            {template.name.replace(' Template', '')}_JohnDoe_Final.docx
-                          </h4>
-                          <p className="text-sm text-gray-500">Generated from {template.name}</p>
+                          <h4 className="font-medium text-gray-900">{doc.fileName}</h4>
+                          <p className="text-sm text-gray-500">
+                            Generated from {doc.templateName}
+                            {doc.populatedFields && ` • ${Object.keys(doc.populatedFields).length} fields populated`}
+                          </p>
                         </div>
                       </div>
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+                      <button 
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                        onClick={() => alert('Document download will be available soon!')}
+                      >
                         <Download className="w-4 h-4 inline mr-2" />
                         Download
                       </button>
@@ -428,7 +475,10 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                   ))}
                 </div>
 
-                <button className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium">
+                <button 
+                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium"
+                  onClick={() => alert('ZIP download will be available soon!')}
+                >
                   <Package className="w-5 h-5 inline mr-2" />
                   Download All as ZIP
                 </button>

@@ -47,10 +47,12 @@ export interface IntakeForm {
 }
 
 export interface ClientResponse {
-  intakeFormId: string
-  submittedAt: string
   responses: Record<string, any> // Field name -> response value
-  submittedBy: string
+  customFields?: any[]
+  customClauses?: any[]
+  savedAt?: any // Timestamp from auto-save
+  submittedAt?: any // Timestamp from final submission
+  status: 'in_progress' | 'submitted' // Track response status
 }
 
 export interface GeneratedDocument {
@@ -83,6 +85,7 @@ export interface Service {
   
   // Generated Documents
   generatedDocuments?: GeneratedDocument[]
+  documentsGeneratedAt?: any // Timestamp when documents were generated
   
   // Metadata
   createdBy: string
