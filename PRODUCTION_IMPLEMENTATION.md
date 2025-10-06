@@ -141,9 +141,34 @@ draft → intake_sent → intake_submitted → documents_ready → completed
 1. Create service → 2. Load templates → 3. Generate intake → 4. Send email → 5. Navigate to service detail
 
 #### Service Details Page (`/admin/services/[serviceId]`)
-**Status:** 🚧 Needs Update (still uses mock data)
+**Status:** ✅ Fully Functional
 
-**Next:** Load real service data from Firestore
+**Features:**
+- Real-time Firestore subscription with onSnapshot
+- Loading state with spinner
+- Error state with friendly message
+- Service info with real timestamps
+- Templates list with AI sections count
+- Intake form section (conditional - only if generated)
+- Deduplication statistics display
+- Client response tracking
+- Document generation UI (ready for backend)
+- Real-time status updates
+
+**Data Source:** Real Firestore document `services/{serviceId}`
+
+**What's Working:**
+- Loads service data in real-time
+- Displays templates with AI section counts
+- Shows intake form link and statistics
+- Conditional sections based on service status
+- Proper date formatting for all timestamps
+- Null-safe rendering throughout
+
+**What's Next:**
+- Connect "View Template" buttons to template viewer
+- Implement "Resend Intake" functionality
+- Create document generation API endpoint
 
 ---
 
@@ -217,13 +242,15 @@ Stats: 6 total fields → 4 unique (2 duplicates removed)
    - Ready for production email service
    - Intake link generation
 
-### 🚧 What's Next (Phase 2)
+### 🚧 What's Next (Phase 2B)
 
-1. **Service Details Page**
-   - Load real service data
-   - Show templates with AI sections
-   - Display intake form details
-   - Track client responses
+1. **Service Details Page Enhancements**
+   - ✅ Load real service data (DONE)
+   - ✅ Show templates with AI sections (DONE)
+   - ✅ Display intake form details (DONE)
+   - ✅ Track client responses (DONE)
+   - 🚧 Connect "View Template" buttons
+   - 🚧 Implement "Resend Intake" functionality
 
 2. **Client Intake Portal**
    - Public intake form page
@@ -473,7 +500,10 @@ console.log(result.aiSection.generatedContent)
 - [x] Build and deploy successful
 
 ### Phase 2: 🚧 IN PROGRESS
-- [ ] Service details page updated
+- [x] Service details page updated with real data
+- [x] Real-time Firestore subscription for service
+- [x] Loading and error states
+- [x] Conditional rendering based on data
 - [ ] Client intake form functional
 - [ ] Document generation working
 - [ ] Email service integrated
