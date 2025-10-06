@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { LoadingSpinner } from '@/components/ui/loading-components'
+import { showSuccessToast, showErrorToast } from '@/lib/toast-helpers'
 import TemplateUpload from './TemplateUpload'
 import TemplateEditor from './TemplateEditor'
 
@@ -56,8 +57,10 @@ export default function TemplateManager() {
     if (confirm('Are you sure you want to delete this template?')) {
       try {
         await deleteDoc(doc(db, 'templates', templateId))
+        showSuccessToast('Template deleted successfully')
       } catch (error) {
         console.error('Error deleting template:', error)
+        showErrorToast('Failed to delete template')
       }
     }
   }
@@ -80,7 +83,7 @@ export default function TemplateManager() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <LoadingSpinner />
+        <LoadingSpinner size="lg" message="Loading templates..." />
       </div>
     )
   }
@@ -131,7 +134,7 @@ export default function TemplateManager() {
       ) : (
         <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" data-testid="template-grid">
           {templates.map((template) => (
-            <div key={template.id} className="card">
+            <div key={template.id} className="card hover-scale transition-all duration-300 hover:shadow-xl">
               <div className="card-content">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">

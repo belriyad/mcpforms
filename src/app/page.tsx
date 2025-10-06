@@ -1,27 +1,34 @@
-
+import { FileText, ClipboardCheck, Zap, ArrowRight } from 'lucide-react'
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <div className="container mx-auto px-4 py-8 sm:py-16">
-        <div className="text-center" data-testid="hero-section">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
+        <div className="text-center animate-fade-in" data-testid="hero-section">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-blue-200 shadow-sm mb-6">
+            <Zap className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-700">AI-Powered Document Generation</span>
+          </div>
+          
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6">
             Smart Forms AI
           </h1>
-          <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
+          <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4 leading-relaxed">
             AI-powered business document generator that transforms templates into dynamic forms
             and creates personalized documents automatically.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4 sm:space-x-4 sm:gap-0">
             <a
               href="/admin"
-              className="btn btn-primary btn-lg"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
             >
               Admin Dashboard
+              <ArrowRight className="w-5 h-5" />
             </a>
             <a
               href="/demo"
-              className="btn btn-outline btn-lg"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 text-gray-700 font-medium rounded-xl hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200"
             >
               View Demo
             </a>
@@ -29,43 +36,37 @@ export default function Home() {
         </div>
         
         <div className="mt-8 sm:mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" data-testid="features-grid">
-          <div className="card">
-            <div className="card-content">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 hover-scale transition-all duration-300 hover:shadow-xl">
+            <div className="p-6">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mb-4 shadow-lg">
+                <FileText className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">AI Template Parsing</h3>
-              <p className="text-gray-600">
+              <h3 className="text-xl font-semibold mb-2 text-gray-900">AI Template Parsing</h3>
+              <p className="text-gray-600 leading-relaxed">
                 Upload PDF or Word documents and let AI extract form fields automatically.
               </p>
             </div>
           </div>
           
-          <div className="card">
-            <div className="card-content">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 hover-scale transition-all duration-300 hover:shadow-xl">
+            <div className="p-6">
+              <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mb-4 shadow-lg">
+                <ClipboardCheck className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Dynamic Forms</h3>
-              <p className="text-gray-600">
+              <h3 className="text-xl font-semibold mb-2 text-gray-900">Dynamic Forms</h3>
+              <p className="text-gray-600 leading-relaxed">
                 Generate beautiful, responsive intake forms with validation and progress saving.
               </p>
             </div>
           </div>
           
-          <div className="card">
-            <div className="card-content">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 hover-scale transition-all duration-300 hover:shadow-xl">
+            <div className="p-6">
+              <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mb-4 shadow-lg">
+                <Zap className="w-7 h-7 text-white" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Auto Document Generation</h3>
-              <p className="text-gray-600">
+              <h3 className="text-xl font-semibold mb-2 text-gray-900">Auto Document Generation</h3>
+              <p className="text-gray-600 leading-relaxed">
                 Populate templates with form data and generate final documents automatically.
               </p>
             </div>

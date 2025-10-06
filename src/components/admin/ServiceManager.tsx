@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { LoadingSpinner } from '@/components/ui/loading-components'
+import { showSuccessToast, showErrorToast, showLoadingToast } from '@/lib/toast-helpers'
 import toast from 'react-hot-toast'
 
 interface Service {
@@ -128,7 +129,7 @@ export default function ServiceManager() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <LoadingSpinner />
+        <LoadingSpinner size="lg" message="Loading services..." />
       </div>
     )
   }

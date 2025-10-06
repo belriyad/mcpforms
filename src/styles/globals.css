@@ -1,11 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Primary - Trust & Professional */
+    --primary-50: #eff6ff;
+    --primary-100: #dbeafe;
+    --primary-200: #bfdbfe;
+    --primary-300: #93c5fd;
+    --primary-400: #60a5fa;
+    --primary-500: #3b82f6;
+    --primary-600: #2563eb;
+    --primary-700: #1d4ed8;
+    --primary-800: #1e40af;
+    --primary-900: #1e3a8a;
+    
+    /* Secondary - Innovation & AI */
+    --secondary-50: #faf5ff;
+    --secondary-500: #a855f7;
+    --secondary-600: #9333ea;
+    
+    /* Success */
+    --success-50: #f0fdf4;
+    --success-500: #10b981;
+    --success-600: #059669;
+    
+    /* Warning */
+    --warning-50: #fffbeb;
+    --warning-500: #f59e0b;
+    
+    /* Error */
+    --error-50: #fef2f2;
+    --error-500: #ef4444;
+  }
+  
+  * {
+    @apply border-gray-200;
+  }
+  
   body {
     @apply bg-white text-gray-900;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  *:focus-visible {
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+  }
+  
+  ::selection {
+    @apply bg-blue-500 text-white;
   }
 }
 
@@ -94,5 +145,91 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+  
+  /* Animations */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
+  
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .animate-float-slow {
+    animation: float 4s ease-in-out infinite;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+  
+  .animate-shimmer {
+    background: linear-gradient(
+      to right,
+      #f3f4f6 4%,
+      #e5e7eb 25%,
+      #f3f4f6 36%
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 2s infinite linear;
+  }
+  
+  /* Utility classes */
+  .hover-scale {
+    @apply transition-transform hover:scale-105;
+  }
+  
+  .glow {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  
+  .glow-hover:hover {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+  }
+  
+  /* Loading skeleton */
+  .skeleton {
+    @apply animate-shimmer bg-gray-200 rounded;
   }
 }

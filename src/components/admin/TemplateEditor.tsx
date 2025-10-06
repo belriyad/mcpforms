@@ -30,13 +30,27 @@ import AIAssistant from './AIAssistant';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import type { Template, Placeholder } from '@/types/template';
 
+type TemplateWithMetadata = Template & {
+  placeholders?: Placeholder[];
+  default_customization_rules?: {
+    allow_custom_fields: boolean;
+    allow_custom_clauses: boolean;
+    require_approval: boolean;
+    allowed_field_types?: string[];
+  };
+  lockStatus?: {
+    isLocked?: boolean;
+    lockedBy?: string | null;
+  };
+};
+
 interface TemplateEditorProps {
   templateId: string;
   onClose?: () => void;
 }
 
 export default function TemplateEditor({ templateId, onClose }: TemplateEditorProps) {
-  const [template, setTemplate] = useState<Template | null>(null);
+  const [template, setTemplate] = useState<TemplateWithMetadata | null>(null);
   const [placeholders, setPlaceholders] = useState<Placeholder[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,35 +86,44 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
   const loadTemplate = async () => {
     try {
       setLoading(true);
-      const getTemplate = httpsCallable(functions, 'getTemplate');
+      const getTemplate = httpsCallable(functions, 'getTemplateWithPlaceholders');
       const result: any = await getTemplate({ templateId });
 
-      if (result.data.success) {
-        setTemplate(result.data.data);
-        
-        // Load customization rules if they exist
-        if (result.data.data.default_customization_rules) {
-          const rules = result.data.data.default_customization_rules;
+      if (result.data?.success && result.data.template) {
+        const templateData = result.data.template as TemplateWithMetadata;
+
+        setTemplate(templateData);
+        setPlaceholders(templateData.placeholders || []);
+
+        if (templateData.default_customization_rules) {
+          const rules = templateData.default_customization_rules;
           setEnableCustomization(true);
           setAllowCustomFields(rules.allow_custom_fields);
           setAllowCustomClauses(rules.allow_custom_clauses);
           setRequireApproval(rules.require_approval);
           setAllowedFieldTypes(rules.allowed_field_types || []);
-        }
-        
-        // Load latest version placeholders
-        if (result.data.data.currentVersion) {
-          await loadPlaceholders(result.data.data.currentVersion);
+        } else {
+          setEnableCustomization(false);
+          setAllowCustomFields(true);
+          setAllowCustomClauses(true);
+          setRequireApproval(true);
+          setAllowedFieldTypes(['text', 'email', 'number', 'date']);
         }
 
-        // Check lock status
-        await checkLock();
+        if (templateData.lockStatus) {
+          setIsLocked(!!templateData.lockStatus.isLocked);
+          setLockHolder(templateData.lockStatus.lockedBy || null);
+        } else {
+          setIsLocked(false);
+          setLockHolder(null);
+        }
       } else {
         toast({
           title: 'Error',
-          description: result.data.error || 'Failed to load template',
+          description: result.data?.error || 'Failed to load template',
           variant: 'destructive',
         });
+        setTemplate(null);
       }
     } catch (error: any) {
       toast({
@@ -110,19 +133,6 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadPlaceholders = async (version: number) => {
-    try {
-      const getTemplateVersion = httpsCallable(functions, 'getTemplateVersion');
-      const result: any = await getTemplateVersion({ templateId, version });
-
-      if (result.data.success) {
-        setPlaceholders(result.data.data.placeholders || []);
-      }
-    } catch (error: any) {
-      console.error('Failed to load placeholders:', error);
     }
   };
 

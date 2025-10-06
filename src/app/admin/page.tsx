@@ -6,6 +6,9 @@ import LoginForm from '@/components/auth/LoginForm'
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+
 export default function AdminPage() {
   const { user, loading, authError } = useAuth()
 
