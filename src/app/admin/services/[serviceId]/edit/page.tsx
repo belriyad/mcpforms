@@ -54,6 +54,7 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
   // AI Field Generation
   const [showAISection, setShowAISection] = useState(false)
   const [aiParagraph, setAiParagraph] = useState('')
+  const [selectedTemplateForAI, setSelectedTemplateForAI] = useState<string>('') // Template selection for AI
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiSuggestedFields, setAiSuggestedFields] = useState<FormField[]>([])
   const [selectedAIFields, setSelectedAIFields] = useState<Set<string>>(new Set())
@@ -191,6 +192,11 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
 
     setAiGenerating(true)
     try {
+      // Get template context if selected
+      const selectedTemplate = selectedTemplateForAI 
+        ? templates.find(t => t.id === selectedTemplateForAI)
+        : null
+
       const response = await fetch('/api/ai/generate-fields', {
         method: 'POST',
         headers: {
@@ -201,16 +207,25 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
           existingFields: fields.map(f => f.name),
           serviceContext: {
             name: service?.name,
-            description: service?.description
+            description: service?.description,
+            templateName: selectedTemplate?.name,
+            templateFileName: selectedTemplate?.fileName
           }
         })
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to generate fields')
-      }
-
       const data = await response.json()
+      
+      if (!response.ok) {
+        // Show specific error message from API
+        const errorMsg = data.error || 'Failed to generate fields'
+        if (errorMsg.includes('API key not configured')) {
+          showErrorToast('OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.')
+        } else {
+          showErrorToast(errorMsg)
+        }
+        return
+      }
       
       if (data.fields && data.fields.length > 0) {
         const generatedFields: FormField[] = data.fields.map((field: any, index: number) => ({
@@ -231,9 +246,9 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
       } else {
         showErrorToast('AI could not identify any fields from the description')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating fields with AI:', error)
-      showErrorToast('Failed to generate fields with AI')
+      showErrorToast(`Failed to generate fields with AI: ${error.message || 'Unknown error'}`)
     } finally {
       setAiGenerating(false)
     }
@@ -472,6 +487,30 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
 
               {showAISection && (
                 <div className="space-y-4">
+                  {/* Template Selection */}
+                  {templates.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select Template (Optional)
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Choose a template to provide context for better field generation
+                      </p>
+                      <select
+                        value={selectedTemplateForAI}
+                        onChange={(e) => setSelectedTemplateForAI(e.target.value)}
+                        className="form-input"
+                      >
+                        <option value="">-- No template (general fields) --</option>
+                        {templates.map(template => (
+                          <option key={template.id} value={template.id}>
+                            {template.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Describe the fields you need
