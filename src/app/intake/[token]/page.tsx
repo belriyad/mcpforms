@@ -78,8 +78,8 @@ export default function IntakeFormPage() {
 
   const fetchIntakeData = async () => {
     try {
-      // Temporarily call Cloud Function directly to bypass Next.js API route issues
-      const response = await fetch(`https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}`)
+      // Use our new API endpoint
+      const response = await fetch(`/api/intake/load/${token}`)
       
       // Check if response is ok and content-type is JSON
       if (!response.ok) {
@@ -165,8 +165,8 @@ export default function IntakeFormPage() {
         status: intakeData?.status,
         isSubmitted 
       })
-      // Temporarily call Cloud Function directly to bypass Next.js API route issues
-      await fetch(`https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}/save`, {
+      // Use our new API endpoint
+      await fetch(`/api/intake/save/${token}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -192,8 +192,8 @@ export default function IntakeFormPage() {
     try {
       console.log('🚀 Submitting form data:', { intakeId: intakeData.intakeId, formData })
       
-      // Call the HTTP API submit endpoint
-      const response = await fetch(`https://us-central1-formgenai-4545.cloudfunctions.net/intakeFormAPI/intake/${token}/submit`, {
+      // Use our new API endpoint
+      const response = await fetch(`/api/intake/submit/${token}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
