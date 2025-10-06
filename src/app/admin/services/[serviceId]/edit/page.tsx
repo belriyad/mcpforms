@@ -50,6 +50,13 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
     required: false,
     isCustom: true
   })
+  
+  // AI Field Generation
+  const [showAISection, setShowAISection] = useState(false)
+  const [aiParagraph, setAiParagraph] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiSuggestedFields, setAiSuggestedFields] = useState<FormField[]>([])
+  const [selectedAIFields, setSelectedAIFields] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadServiceData()
@@ -174,6 +181,90 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
       setFields(fields.filter(f => f.id !== fieldId))
       showSuccessToast('Field deleted successfully')
     }
+  }
+
+  const handleAIGenerateFields = async () => {
+    if (!aiParagraph.trim()) {
+      showErrorToast('Please enter a description of the fields you need')
+      return
+    }
+
+    setAiGenerating(true)
+    try {
+      const response = await fetch('/api/ai/generate-fields', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          description: aiParagraph,
+          existingFields: fields.map(f => f.name),
+          serviceContext: {
+            name: service?.name,
+            description: service?.description
+          }
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate fields')
+      }
+
+      const data = await response.json()
+      
+      if (data.fields && data.fields.length > 0) {
+        const generatedFields: FormField[] = data.fields.map((field: any, index: number) => ({
+          id: `ai_${Date.now()}_${index}`,
+          name: field.name || `field_${Date.now()}_${index}`,
+          label: field.label || field.name,
+          type: field.type || 'text',
+          required: field.required || false,
+          options: field.options,
+          placeholder: field.placeholder,
+          description: field.description,
+          isCustom: true
+        }))
+
+        setAiSuggestedFields(generatedFields)
+        setSelectedAIFields(new Set(generatedFields.map(f => f.id)))
+        showSuccessToast(`AI generated ${generatedFields.length} field suggestions`)
+      } else {
+        showErrorToast('AI could not identify any fields from the description')
+      }
+    } catch (error) {
+      console.error('Error generating fields with AI:', error)
+      showErrorToast('Failed to generate fields with AI')
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
+  const handleAddAIFields = () => {
+    const fieldsToAdd = aiSuggestedFields.filter(f => selectedAIFields.has(f.id))
+    
+    if (fieldsToAdd.length === 0) {
+      showErrorToast('Please select at least one field to add')
+      return
+    }
+
+    setFields([...fields, ...fieldsToAdd])
+    showSuccessToast(`Added ${fieldsToAdd.length} AI-generated field(s)`)
+    
+    // Reset AI section
+    setAiParagraph('')
+    setAiSuggestedFields([])
+    setSelectedAIFields(new Set())
+    setShowAISection(false)
+  }
+
+  const toggleAIFieldSelection = (fieldId: string) => {
+    const newSelection = new Set(selectedAIFields)
+    if (newSelection.has(fieldId)) {
+      newSelection.delete(fieldId)
+    } else {
+      newSelection.add(fieldId)
+    }
+    setSelectedAIFields(newSelection)
   }
 
   const handleSave = async () => {
@@ -358,6 +449,158 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
                 </div>
               </div>
             )}
+
+            {/* AI Field Generator */}
+            <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl shadow-sm border-2 border-purple-200 p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">AI Field Generator</h3>
+                    <p className="text-sm text-gray-600">Describe the fields you need and let AI generate them</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAISection(!showAISection)}
+                  className="btn btn-sm btn-outline"
+                >
+                  {showAISection ? 'Hide' : 'Show'} AI Generator
+                </button>
+              </div>
+
+              {showAISection && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Describe the fields you need
+                    </label>
+                    <textarea
+                      value={aiParagraph}
+                      onChange={(e) => setAiParagraph(e.target.value)}
+                      className="form-textarea"
+                      rows={4}
+                      placeholder="Example: I need fields to collect employee information including their full name, email address, phone number, department (choose from Sales, Marketing, Engineering, HR), start date, and whether they need parking access."
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleAIGenerateFields}
+                    disabled={aiGenerating || !aiParagraph.trim()}
+                    className="btn btn-primary"
+                  >
+                    {aiGenerating ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span className="ml-2">Generating Fields...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate Fields with AI
+                      </>
+                    )}
+                  </button>
+
+                  {aiSuggestedFields.length > 0 && (
+                    <div className="mt-6 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-medium text-gray-900">
+                          AI Suggested Fields ({aiSuggestedFields.length})
+                        </h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedAIFields(new Set(aiSuggestedFields.map(f => f.id)))}
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            onClick={() => setSelectedAIFields(new Set())}
+                            className="text-sm text-gray-600 hover:underline"
+                          >
+                            Deselect All
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {aiSuggestedFields.map(field => (
+                          <div 
+                            key={field.id} 
+                            className={`bg-white rounded-lg p-4 border-2 transition-all cursor-pointer ${
+                              selectedAIFields.has(field.id) 
+                                ? 'border-purple-500 bg-purple-50' 
+                                : 'border-gray-200 hover:border-purple-300'
+                            }`}
+                            onClick={() => toggleAIFieldSelection(field.id)}
+                          >
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedAIFields.has(field.id)}
+                                onChange={() => toggleAIFieldSelection(field.id)}
+                                className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h5 className="font-medium text-gray-900">{field.label}</h5>
+                                  {field.required && (
+                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
+                                      Required
+                                    </span>
+                                  )}
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                                    {field.type === 'text' ? 'Text Input' :
+                                     field.type === 'textarea' ? 'Text Area' :
+                                     field.type === 'select' ? 'Dropdown' :
+                                     field.type === 'radio' ? 'Radio Buttons' :
+                                     field.type === 'checkbox' ? 'Checkboxes' :
+                                     field.type === 'number' ? 'Number' :
+                                     field.type === 'email' ? 'Email' :
+                                     field.type === 'tel' ? 'Phone' :
+                                     field.type === 'date' ? 'Date' : field.type}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-500 mb-1">Field name: {field.name}</p>
+                                {field.placeholder && (
+                                  <p className="text-sm text-gray-500 mb-1">Placeholder: {field.placeholder}</p>
+                                )}
+                                {field.description && (
+                                  <p className="text-sm text-gray-600 mb-1">{field.description}</p>
+                                )}
+                                {field.options && field.options.length > 0 && (
+                                  <div className="mt-2">
+                                    <p className="text-xs text-gray-500 mb-1">Options:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {field.options.map((option, idx) => (
+                                        <span key={idx} className="px-2 py-0.5 bg-purple-200 text-purple-800 text-xs rounded">
+                                          {option}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={handleAddAIFields}
+                        disabled={selectedAIFields.size === 0}
+                        className="btn btn-primary w-full"
+                      >
+                        Add {selectedAIFields.size} Selected Field{selectedAIFields.size !== 1 ? 's' : ''}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Custom Fields */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
