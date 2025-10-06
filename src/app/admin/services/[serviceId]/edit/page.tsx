@@ -297,7 +297,10 @@ export default function EditServicePage({ params }: { params: { serviceId: strin
       }, 1000)
     } catch (error) {
       console.error('Error saving service:', error)
-      showErrorToast('Failed to save changes')
+      // Show more detailed error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('Detailed error:', errorMessage, error)
+      showErrorToast(`Failed to save changes: ${errorMessage}`)
     } finally {
       setSaving(false)
     }

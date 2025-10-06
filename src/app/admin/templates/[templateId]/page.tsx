@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { 
   ArrowLeft, 
   FileText, 
@@ -66,68 +68,41 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
 
   const loadTemplate = async () => {
     try {
-      // Mock template data - replace with actual API call
-      const mockTemplate: Template = {
-        id: params.templateId,
-        name: 'Employment Contract',
-        description: 'Standard employment agreement template',
-        originalFileName: 'employment-contract.docx',
-        currentVersion: 1
+      // Load template from Firestore
+      const templateDoc = await getDoc(doc(db, 'templates', params.templateId))
+      
+      if (!templateDoc.exists()) {
+        showErrorToast('Template not found')
+        router.push('/admin')
+        return
       }
 
-      const mockFields: FormField[] = [
-        {
-          id: 'field_1',
-          name: 'employee_name',
-          label: 'Employee Full Name',
-          type: 'text',
-          required: true,
-          placeholder: 'John Doe',
-          description: 'Legal full name as it appears on documents',
-          isCustom: false
-        },
-        {
-          id: 'field_2',
-          name: 'employee_email',
-          label: 'Employee Email',
-          type: 'email',
-          required: true,
-          placeholder: 'john@example.com',
-          isCustom: false
-        },
-        {
-          id: 'field_3',
-          name: 'start_date',
-          label: 'Employment Start Date',
-          type: 'date',
-          required: true,
-          isCustom: false
-        },
-        {
-          id: 'field_4',
-          name: 'position',
-          label: 'Position/Title',
-          type: 'text',
-          required: true,
-          placeholder: 'Software Engineer',
-          isCustom: false
-        },
-        {
-          id: 'field_5',
-          name: 'salary',
-          label: 'Annual Salary',
-          type: 'number',
-          required: true,
-          placeholder: '75000',
-          description: 'Annual gross salary in USD',
-          isCustom: false
-        }
-      ]
+      const templateData = templateDoc.data()
+      
+      const loadedTemplate: Template = {
+        id: templateDoc.id,
+        name: templateData.name || 'Untitled Template',
+        description: templateData.description,
+        originalFileName: templateData.originalFileName || 'unknown.docx',
+        currentVersion: templateData.currentVersion || 1
+      }
 
-      setTemplate(mockTemplate)
-      setFields(mockFields)
+      // Load extracted fields (from original document) and custom fields
+      const extractedFields: FormField[] = (templateData.extractedFields || []).map((f: any) => ({
+        ...f,
+        isCustom: false
+      }))
+      
+      const customFields: FormField[] = (templateData.customFields || []).map((f: any) => ({
+        ...f,
+        isCustom: true
+      }))
+
+      setTemplate(loadedTemplate)
+      setFields([...extractedFields, ...customFields])
       setLoading(false)
     } catch (error) {
+      console.error('Error loading template:', error)
       showErrorToast('Failed to load template')
       setLoading(false)
     }
@@ -223,13 +198,25 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
   }
 
   const handleSave = async () => {
+    if (!template) return
+    
     setSaving(true)
     try {
-      // Call API to save field changes
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Mock delay
+      // Save the custom fields to Firestore
+      // We only save custom fields, not template fields (those come from the original document)
+      const customFields = fields.filter(f => f.isCustom)
+      
+      await updateDoc(doc(db, 'templates', template.id), {
+        customFields: customFields,
+        updatedAt: new Date().toISOString()
+      })
+      
       showSuccessToast('Template updated successfully')
     } catch (error) {
-      showErrorToast('Failed to save template')
+      console.error('Error saving template:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.error('Detailed error:', errorMessage, error)
+      showErrorToast(`Failed to save template: ${errorMessage}`)
     } finally {
       setSaving(false)
     }
