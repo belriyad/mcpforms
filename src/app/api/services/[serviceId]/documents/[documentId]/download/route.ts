@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { adminDb, adminStorage } from '@/lib/firebase-admin'
+import { getAdminDb, getAdminStorage, isAdminInitialized } from '@/lib/firebase-admin'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { serviceId: string; documentId: string } }
 ) {
   try {
+    // Check if Firebase Admin is initialized
+    if (!isAdminInitialized()) {
+      return NextResponse.json(
+        { error: 'Document download not configured. Please setup Firebase Admin credentials.' },
+        { status: 503 }
+      )
+    }
+
     const { serviceId, documentId } = params
 
     // Get service from Firestore
+    const adminDb = getAdminDb()
     const serviceDoc = await adminDb.collection('services').doc(serviceId).get()
     
     if (!serviceDoc.exists) {
@@ -36,6 +45,7 @@ export async function GET(
     }
 
     // Get file from storage
+    const adminStorage = getAdminStorage()
     const bucket = adminStorage.bucket()
     const file = bucket.file(document.storagePath)
     

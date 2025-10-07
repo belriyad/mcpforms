@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Service } from '@/types/service'
+import ViewResponsesModal from '@/components/ViewResponsesModal'
+import EditResponsesModal from '@/components/EditResponsesModal'
 import { 
   ArrowLeft,
   FileText,
@@ -33,6 +35,8 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [error, setError] = useState<string | null>(null)
   const [showIntakePreview, setShowIntakePreview] = useState(false)
   const [generatingDocs, setGeneratingDocs] = useState(false)
+  const [showViewResponses, setShowViewResponses] = useState(false)
+  const [showEditResponses, setShowEditResponses] = useState(false)
 
   // Load service from Firestore with real-time updates
   useEffect(() => {
@@ -381,11 +385,17 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               </div>
 
               <div className="flex gap-2">
-                <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                <button 
+                  onClick={() => setShowViewResponses(true)}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                >
                   <Eye className="w-4 h-4 inline mr-2" />
                   View Responses
                 </button>
-                <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
+                <button 
+                  onClick={() => setShowEditResponses(true)}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                >
                   <Edit className="w-4 h-4 inline mr-2" />
                   Edit Responses
                 </button>
@@ -492,6 +502,26 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
           Last updated {service.updatedAt ? new Date(service.updatedAt as any).toLocaleString() : 'Unknown'}
         </div>
       </div>
+
+      {/* Modals */}
+      {service && (
+        <>
+          <ViewResponsesModal
+            service={service}
+            isOpen={showViewResponses}
+            onClose={() => setShowViewResponses(false)}
+          />
+          <EditResponsesModal
+            service={service}
+            isOpen={showEditResponses}
+            onClose={() => setShowEditResponses(false)}
+            onSave={() => {
+              // Service will update automatically via onSnapshot
+              console.log('Responses saved successfully')
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
