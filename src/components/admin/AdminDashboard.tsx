@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { collection, query, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
+import { signOut } from '@/lib/auth'
+import { useRouter } from 'next/navigation'
 import TemplateManager from './TemplateManager'
 import ServiceManager from './ServiceManager'
 import IntakeMonitor from './IntakeMonitor'
@@ -29,7 +31,13 @@ export default function AdminDashboard() {
     intakes: 0,
     customizations: 0
   })
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push('/login')
+  }
 
   // Real-time stats from Firestore
   useEffect(() => {
@@ -97,7 +105,7 @@ export default function AdminDashboard() {
                 <span className="font-medium">{user?.email}</span>
               </div>
               <button
-                onClick={signOut}
+                onClick={handleSignOut}
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -132,7 +140,7 @@ export default function AdminDashboard() {
                   Welcome, {user?.email}
                 </div>
                 <button
-                  onClick={signOut}
+                  onClick={handleSignOut}
                   className="block w-full text-left px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md"
                 >
                   Sign Out
