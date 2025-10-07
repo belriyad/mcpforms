@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
+import { collection, query, onSnapshot, where, limit } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -41,9 +42,20 @@ export default function IntakeMonitor() {
   const [showGenerateLink, setShowGenerateLink] = useState(false)
   const [documentArtifacts, setDocumentArtifacts] = useState<Record<string, DocumentArtifact[]>>({})
   const [expandedDocuments, setExpandedDocuments] = useState<Record<string, boolean>>({})
+  const { user } = useAuth()
 
   useEffect(() => {
-    const intakesQuery = query(collection(db, 'intakes'), orderBy('createdAt', 'desc'))
+    if (!user?.uid) {
+      setLoading(false)
+      return
+    }
+
+    // Query intakes with user filter and limit (no orderBy until index is created)
+    const intakesQuery = query(
+      collection(db, 'intakes'),
+      where('createdBy', '==', user.uid),
+      limit(50)
+    )
     
     const unsubscribeIntakes = onSnapshot(intakesQuery, (snapshot) => {
       const intakesData = snapshot.docs.map(doc => ({
@@ -51,12 +63,23 @@ export default function IntakeMonitor() {
         ...doc.data()
       })) as Intake[]
       
-      setIntakes(intakesData)
+      // Sort client-side temporarily
+      const sortedIntakes = intakesData.sort((a, b) => {
+        const aTime = a.createdAt?.toDate?.() || 0
+        const bTime = b.createdAt?.toDate?.() || 0
+        return bTime - aTime
+      })
+      
+      setIntakes(sortedIntakes)
       setLoading(false)
     })
 
-    // Listen for document artifacts
-    const artifactsQuery = query(collection(db, 'documentArtifacts'), orderBy('generatedAt', 'desc'))
+    // Query document artifacts with user filter and limit (no orderBy until index is created)
+    const artifactsQuery = query(
+      collection(db, 'documentArtifacts'),
+      where('createdBy', '==', user.uid),
+      limit(100)
+    )
     
     const unsubscribeArtifacts = onSnapshot(artifactsQuery, (snapshot) => {
       const artifacts = snapshot.docs.map(doc => ({
@@ -73,6 +96,15 @@ export default function IntakeMonitor() {
         artifactsByIntake[artifact.intakeId].push(artifact)
       })
       
+      // Sort artifacts within each intake
+      Object.keys(artifactsByIntake).forEach(intakeId => {
+        artifactsByIntake[intakeId].sort((a, b) => {
+          const aTime = a.generatedAt?.toDate?.() || 0
+          const bTime = b.generatedAt?.toDate?.() || 0
+          return bTime - aTime
+        })
+      })
+      
       setDocumentArtifacts(artifactsByIntake)
     })
 
@@ -80,7 +112,7 @@ export default function IntakeMonitor() {
       unsubscribeIntakes()
       unsubscribeArtifacts()
     }
-  }, [])
+  }, [user?.uid])
 
   const handleApproveIntake = async (intakeId: string, approved: boolean) => {
     try {

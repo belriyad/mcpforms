@@ -116,6 +116,81 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
     
+    // Intakes - client form submissions
+    // MIGRATION MODE: Allow access to intakes without createdBy field
+    match /intakes/{intakeId} {
+      allow read: if isAuthenticated() && 
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy intakes
+                       isAdmin()
+                     );
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow updating legacy intakes
+                         isAdmin()
+                       );
+      allow delete: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow deleting legacy intakes
+                         isAdmin()
+                       );
+    }
+    
+    // Document Artifacts - generated documents
+    // MIGRATION MODE: Allow access to artifacts without createdBy field
+    match /documentArtifacts/{artifactId} {
+      allow read: if isAuthenticated() && 
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy artifacts
+                       isAdmin()
+                     );
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow updating legacy artifacts
+                         isAdmin()
+                       );
+      allow delete: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow deleting legacy artifacts
+                         isAdmin()
+                       );
+    }
+    
+    // Intake Submissions - may be legacy/duplicate of intakes
+    // MIGRATION MODE: Allow access to submissions without createdBy field
+    match /intakeSubmissions/{submissionId} {
+      allow read: if isAuthenticated() && 
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy submissions
+                       isAdmin()
+                     );
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow updating legacy submissions
+                         isAdmin()
+                       );
+      allow delete: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow deleting legacy submissions
+                         isAdmin()
+                       );
+    }
+    
     // System settings - admin only
     match /settings/{settingId} {
       allow read: if isAuthenticated();
