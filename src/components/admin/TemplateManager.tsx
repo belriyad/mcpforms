@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, doc, deleteDoc, where, orderBy, limit } from 'firebase/firestore'
+import { collection, query, onSnapshot, doc, deleteDoc, where, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { LoadingSpinner } from '@/components/ui/loading-components'
@@ -33,11 +33,10 @@ export default function TemplateManager() {
     
     console.log('📊 TemplateManager: Setting up Firestore listener for user:', user.uid)
     
-    // Optimized query with orderBy and limit
+    // Simplified query without orderBy until indexes are built
     const q = query(
       collection(db, 'templates'),
       where('createdBy', '==', user.uid),
-      orderBy('createdAt', 'desc'),
       limit(50) // Limit to 50 most recent templates for performance
     )
     
@@ -49,7 +48,12 @@ export default function TemplateManager() {
           ...doc.data()
         })) as Template[]
         
-        setTemplates(templatesData)
+        // Sort client-side temporarily
+        setTemplates(templatesData.sort((a, b) => {
+          const aTime = a.createdAt?.toDate?.() || 0
+          const bTime = b.createdAt?.toDate?.() || 0
+          return bTime - aTime
+        }))
         setLoading(false)
       },
       (error) => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, doc, deleteDoc, where, orderBy, limit } from 'firebase/firestore'
+import { collection, query, onSnapshot, doc, deleteDoc, where, limit } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
@@ -47,11 +47,10 @@ export default function ServiceManager() {
     console.log('⚙️ ServiceManager: Setting up Firestore listeners for user:', user.uid)
     setError(null)
     
-    // Load services - filter by current user with limit
+    // Load services - filter by current user with limit (no orderBy until indexes are built)
     const servicesQuery = query(
       collection(db, 'services'),
       where('createdBy', '==', user.uid),
-      orderBy('createdAt', 'desc'),
       limit(50) // Limit to 50 most recent services
     )
     const unsubscribeServices = onSnapshot(servicesQuery, 
@@ -62,7 +61,12 @@ export default function ServiceManager() {
           ...doc.data()
         })) as Service[]
         
-        setServices(servicesData)
+        // Sort client-side temporarily
+        setServices(servicesData.sort((a, b) => {
+          const aTime = a.createdAt?.toDate?.() || 0
+          const bTime = b.createdAt?.toDate?.() || 0
+          return bTime - aTime
+        }))
       },
       (error) => {
         console.error('❌ ServiceManager: Services error:', error)
@@ -70,11 +74,10 @@ export default function ServiceManager() {
       }
     )
 
-    // Load templates - filter by current user with limit
+    // Load templates - filter by current user with limit (no orderBy until indexes are built)
     const templatesQuery = query(
       collection(db, 'templates'),
       where('createdBy', '==', user.uid),
-      orderBy('createdAt', 'desc'),
       limit(50) // Limit to 50 most recent templates
     )
     const unsubscribeTemplates = onSnapshot(templatesQuery, 
