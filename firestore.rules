@@ -1,9 +1,76 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // TEMPORARY: Allow all access for debugging (AUTH DISABLED)
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isLawyerOrAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['lawyer', 'admin'];
+    }
+    
+    // User profiles - users can read their own, admins can read all
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Templates - only authenticated lawyers/admins can access
+    match /templates/{templateId} {
+      allow read: if isLawyerOrAdmin();
+      allow create: if isLawyerOrAdmin();
+      allow update: if isLawyerOrAdmin();
+      allow delete: if isLawyerOrAdmin();
+    }
+    
+    // Services - lawyers can manage their own services
+    match /services/{serviceId} {
+      allow read: if isLawyerOrAdmin() || 
+                     // Allow clients to read their service via token (handled in code)
+                     resource.data.intakeForm.token != null;
+      allow create: if isLawyerOrAdmin();
+      allow update: if isLawyerOrAdmin();
+      allow delete: if isLawyerOrAdmin();
+    }
+    
+    // Intake customizations - only authenticated lawyers/admins
+    match /intakeCustomizations/{customizationId} {
+      allow read: if isLawyerOrAdmin();
+      allow create: if isLawyerOrAdmin();
+      allow update: if isLawyerOrAdmin();
+      allow delete: if isLawyerOrAdmin();
+    }
+    
+    // Activity logs - read-only for lawyers, write for system
+    match /activityLogs/{logId} {
+      allow read: if isLawyerOrAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+    
+    // System settings - admin only
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // Deny all other access
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

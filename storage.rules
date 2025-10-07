@@ -1,9 +1,69 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // TEMPORARY: Allow all access for debugging (AUTH DISABLED)
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isLawyerOrAdmin() {
+      return request.auth != null &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['lawyer', 'admin'];
+    }
+    
+    function isValidFileSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
+    }
+    
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isValidDocumentType() {
+      return request.resource.contentType.matches('application/(pdf|msword|vnd.openxmlformats-officedocument.wordprocessingml.document)');
+    }
+    
+    // Template documents - only lawyers/admins, max 10MB
+    match /templates/{templateId}/{fileName} {
+      allow read: if isLawyerOrAdmin();
+      allow write: if isLawyerOrAdmin() && 
+                      isValidDocumentType() && 
+                      isValidFileSize(10);
+      allow delete: if isLawyerOrAdmin();
+    }
+    
+    // Generated documents - only lawyers/admins
+    match /generated-documents/{serviceId}/{fileName} {
+      allow read: if isLawyerOrAdmin();
+      allow write: if isLawyerOrAdmin() && isValidFileSize(50);
+      allow delete: if isLawyerOrAdmin();
+    }
+    
+    // User uploads - authenticated users, max 5MB
+    match /user-uploads/{userId}/{fileName} {
+      allow read: if isAuthenticated() && 
+                     (request.auth.uid == userId || isLawyerOrAdmin());
+      allow write: if isAuthenticated() && 
+                      request.auth.uid == userId && 
+                      isValidFileSize(5);
+      allow delete: if isAuthenticated() && 
+                       (request.auth.uid == userId || isLawyerOrAdmin());
+    }
+    
+    // Profile pictures - authenticated users, images only, max 2MB
+    match /profile-pictures/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+                      request.auth.uid == userId && 
+                      isValidImageType() && 
+                      isValidFileSize(2);
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Deny all other access
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
