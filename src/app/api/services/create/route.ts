@@ -15,6 +15,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate userId (createdBy) is provided
+    if (!body.createdBy) {
+      return NextResponse.json(
+        { error: 'Missing createdBy field - user must be authenticated' },
+        { status: 401 }
+      )
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(body.clientEmail)) {
@@ -24,7 +32,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create service document
+    // Create service document with user's ID
     const serviceData = {
       name: body.name,
       description: body.description || '',
@@ -33,7 +41,7 @@ export async function POST(request: NextRequest) {
       status: 'draft',
       templateIds: body.templateIds,
       templates: [], // Will be populated in next step
-      createdBy: 'admin', // TODO: Get from auth context
+      createdBy: body.createdBy, // User ID from authenticated request
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     }

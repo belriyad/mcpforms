@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'
+import { collection, query, onSnapshot, doc, deleteDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import { LoadingSpinner } from '@/components/ui/loading-components'
 import { showSuccessToast, showErrorToast } from '@/lib/toast-helpers'
 import TemplateUpload from './TemplateUpload'
@@ -25,10 +26,16 @@ export default function TemplateManager() {
   const [showUpload, setShowUpload] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
 
   useEffect(() => {
-    console.log('📊 TemplateManager: Setting up Firestore listener')
-    const q = query(collection(db, 'templates'))
+    if (!user?.uid) return
+    
+    console.log('📊 TemplateManager: Setting up Firestore listener for user:', user.uid)
+    const q = query(
+      collection(db, 'templates'),
+      where('createdBy', '==', user.uid)
+    )
     
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
@@ -51,7 +58,7 @@ export default function TemplateManager() {
     )
 
     return unsubscribe
-  }, [])
+  }, [user?.uid])
 
   const handleDelete = async (templateId: string) => {
     if (confirm('Are you sure you want to delete this template?')) {

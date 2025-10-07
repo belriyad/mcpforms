@@ -100,6 +100,7 @@ export interface CreateServiceRequest {
   clientName: string
   clientEmail: string
   templateIds: string[]
+  createdBy: string // User ID who is creating the service
 }
 
 export interface UpdateServiceRequest {

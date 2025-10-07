@@ -29,36 +29,50 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // Templates - only authenticated lawyers/admins can access
+    // Templates - users can ONLY access their own templates
     match /templates/{templateId} {
-      allow read: if isLawyerOrAdmin();
-      allow create: if isLawyerOrAdmin();
-      allow update: if isLawyerOrAdmin();
-      allow delete: if isLawyerOrAdmin();
+      allow read: if isAuthenticated() && 
+                     (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+                       (resource.data.createdBy == request.auth.uid || isAdmin());
     }
     
-    // Services - lawyers can manage their own services
+    // Services - users can ONLY access their own services
     match /services/{serviceId} {
-      allow read: if isLawyerOrAdmin() || 
+      allow read: if isAuthenticated() && 
+                     (resource.data.createdBy == request.auth.uid || isAdmin()) ||
                      // Allow clients to read their service via token (handled in code)
                      resource.data.intakeForm.token != null;
-      allow create: if isLawyerOrAdmin();
-      allow update: if isLawyerOrAdmin();
-      allow delete: if isLawyerOrAdmin();
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+                       (resource.data.createdBy == request.auth.uid || isAdmin());
     }
     
-    // Intake customizations - only authenticated lawyers/admins
+    // Intake customizations - users can ONLY access their own customizations
     match /intakeCustomizations/{customizationId} {
-      allow read: if isLawyerOrAdmin();
-      allow create: if isLawyerOrAdmin();
-      allow update: if isLawyerOrAdmin();
-      allow delete: if isLawyerOrAdmin();
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+                       (resource.data.userId == request.auth.uid || isAdmin());
     }
     
-    // Activity logs - read-only for lawyers, write for system
+    // Activity logs - users can ONLY see their own activity logs
     match /activityLogs/{logId} {
-      allow read: if isLawyerOrAdmin();
-      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
     

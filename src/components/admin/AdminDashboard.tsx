@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot } from 'firebase/firestore'
+import { collection, query, onSnapshot, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { signOut } from '@/lib/auth'
@@ -41,31 +41,45 @@ export default function AdminDashboard() {
 
   // Real-time stats from Firestore
   useEffect(() => {
+    if (!user?.uid) return
+    
     const unsubscribers: (() => void)[] = []
 
-    // Templates count
-    const templatesQuery = query(collection(db, 'templates'))
+    // Templates count - filter by current user
+    const templatesQuery = query(
+      collection(db, 'templates'),
+      where('createdBy', '==', user.uid)
+    )
     const unsubTemplates = onSnapshot(templatesQuery, (snapshot) => {
       setStats(prev => ({ ...prev, templates: snapshot.size }))
     })
     unsubscribers.push(unsubTemplates)
 
-    // Services count
-    const servicesQuery = query(collection(db, 'services'))
+    // Services count - filter by current user
+    const servicesQuery = query(
+      collection(db, 'services'),
+      where('createdBy', '==', user.uid)
+    )
     const unsubServices = onSnapshot(servicesQuery, (snapshot) => {
       setStats(prev => ({ ...prev, services: snapshot.size }))
     })
     unsubscribers.push(unsubServices)
 
-    // Intakes count
-    const intakesQuery = query(collection(db, 'intakeSubmissions'))
+    // Intakes count - filter by current user
+    const intakesQuery = query(
+      collection(db, 'intakeSubmissions'),
+      where('createdBy', '==', user.uid)
+    )
     const unsubIntakes = onSnapshot(intakesQuery, (snapshot) => {
       setStats(prev => ({ ...prev, intakes: snapshot.size }))
     })
     unsubscribers.push(unsubIntakes)
 
-    // Customizations count
-    const customizationsQuery = query(collection(db, 'intakeCustomizations'))
+    // Customizations count - filter by current user
+    const customizationsQuery = query(
+      collection(db, 'intakeCustomizations'),
+      where('userId', '==', user.uid)
+    )
     const unsubCustomizations = onSnapshot(customizationsQuery, (snapshot) => {
       setStats(prev => ({ ...prev, customizations: snapshot.size }))
     })
@@ -74,7 +88,7 @@ export default function AdminDashboard() {
     return () => {
       unsubscribers.forEach(unsub => unsub())
     }
-  }, [])
+  }, [user?.uid])
 
   const tabs = [
     { id: 'templates' as TabType, name: 'Templates', icon: FileText },

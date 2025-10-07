@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore'
+import { collection, query, onSnapshot, doc, deleteDoc, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import { LoadingSpinner } from '@/components/ui/loading-components'
 import { showSuccessToast, showErrorToast, showLoadingToast } from '@/lib/toast-helpers'
 import toast from 'react-hot-toast'
@@ -38,13 +39,19 @@ export default function ServiceManager() {
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
 
   useEffect(() => {
-    console.log('⚙️ ServiceManager: Setting up Firestore listeners')
+    if (!user?.uid) return
+    
+    console.log('⚙️ ServiceManager: Setting up Firestore listeners for user:', user.uid)
     setError(null)
     
-    // Load services
-    const servicesQuery = query(collection(db, 'services'))
+    // Load services - filter by current user
+    const servicesQuery = query(
+      collection(db, 'services'),
+      where('createdBy', '==', user.uid)
+    )
     const unsubscribeServices = onSnapshot(servicesQuery, 
       (snapshot) => {
         console.log('⚙️ ServiceManager: Received services snapshot with', snapshot.docs.length, 'documents')
@@ -61,8 +68,11 @@ export default function ServiceManager() {
       }
     )
 
-    // Load templates
-    const templatesQuery = query(collection(db, 'templates'))
+    // Load templates - filter by current user
+    const templatesQuery = query(
+      collection(db, 'templates'),
+      where('createdBy', '==', user.uid)
+    )
     const unsubscribeTemplates = onSnapshot(templatesQuery, 
       (snapshot) => {
         console.log('⚙️ ServiceManager: Received templates snapshot with', snapshot.docs.length, 'documents')
@@ -85,7 +95,7 @@ export default function ServiceManager() {
       unsubscribeServices()
       unsubscribeTemplates()
     }
-  }, [])
+  }, [user?.uid])
 
   const handleDelete = async (serviceId: string) => {
     if (confirm('Are you sure you want to delete this service?')) {

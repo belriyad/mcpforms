@@ -6,6 +6,7 @@ import { httpsCallable } from 'firebase/functions'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'
 import { functions, storage, db } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -18,6 +19,7 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
   const [templateName, setTemplateName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const { user } = useAuth()
   const [useDirectUpload, setUseDirectUpload] = useState(true)
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -157,6 +159,7 @@ export default function TemplateUpload({ onClose, onUploadComplete }: TemplateUp
         fileType: selectedFile.name.split('.').pop()?.toLowerCase() || 'unknown',
         extractedFields: [],
         status: 'uploading',
+        createdBy: user?.uid || 'unknown', // Add user ID
         createdAt: new Date(),
         updatedAt: new Date(),
       }

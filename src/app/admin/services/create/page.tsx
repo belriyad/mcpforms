@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import { 
   ArrowLeft,
   ArrowRight,
@@ -32,6 +33,7 @@ type Step = 1 | 2 | 3 | 4
 
 export default function CreateServicePage() {
   const router = useRouter()
+  const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -53,11 +55,14 @@ export default function CreateServicePage() {
   const [intakeForm, setIntakeForm] = useState<any>(null)
   const [generatingIntake, setGeneratingIntake] = useState(false)
 
-  // Load templates from Firestore
+  // Load templates from Firestore - filter by current user
   useEffect(() => {
+    if (!user?.uid) return
+    
     const templatesQuery = query(
       collection(db, 'templates'),
-      where('status', '==', 'parsed')
+      where('status', '==', 'parsed'),
+      where('createdBy', '==', user.uid)
     )
     
     const unsubscribe = onSnapshot(templatesQuery, (snapshot) => {
@@ -75,7 +80,7 @@ export default function CreateServicePage() {
     })
 
     return () => unsubscribe()
-  }, [])
+  }, [user?.uid])
 
   const steps = [
     { number: 1, label: 'Service Details', icon: User },
@@ -122,7 +127,8 @@ export default function CreateServicePage() {
         clientName,
         clientEmail,
         description,
-        templateIds: Array.from(selectedTemplates)
+        templateIds: Array.from(selectedTemplates),
+        createdBy: user?.uid || 'unknown' // Add user ID
       }
       
       const createResult = await fetch('/api/services/create', {
