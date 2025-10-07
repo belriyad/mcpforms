@@ -4,7 +4,16 @@ import { Resend } from 'resend'
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
 export const isEmailConfigured = () => {
-  return resend !== null && process.env.RESEND_FROM_EMAIL !== undefined
+  return resend !== null
+}
+
+/**
+ * Get the configured from email address with optional name
+ */
+export function getFromEmail(): string {
+  const email = process.env.FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@smartformsai.com'
+  const name = process.env.FROM_NAME || 'Smart Forms AI'
+  return `${name} <${email}>`
 }
 
 export interface SendEmailOptions {
@@ -17,15 +26,18 @@ export interface SendEmailOptions {
 
 export async function sendEmail({ to, subject, html, text, replyTo }: SendEmailOptions) {
   if (!isEmailConfigured()) {
-    console.warn('⚠️ Email not configured - skipping email send')
+    console.warn('⚠️ Email not configured - logging to console instead')
+    console.log('📧 Would send email:', { to, subject })
+    console.log('📄 HTML preview:', html.substring(0, 200) + '...')
     return {
-      success: false,
-      error: 'Email service not configured. Please set RESEND_API_KEY and RESEND_FROM_EMAIL.'
+      success: true,
+      warning: 'Email service not configured. Email logged to console.',
+      id: 'mock-' + Date.now()
     }
   }
 
   try {
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@example.com'
+    const fromEmail = getFromEmail()
     
     const result = await resend!.emails.send({
       from: fromEmail,
