@@ -30,41 +30,80 @@ service cloud.firestore {
     }
     
     // Templates - users can ONLY access their own templates
+    // MIGRATION MODE: Allow access to templates without createdBy field
     match /templates/{templateId} {
       allow read: if isAuthenticated() && 
-                     (resource.data.createdBy == request.auth.uid || isAdmin());
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy templates
+                       isAdmin()
+                     );
       allow create: if isLawyerOrAdmin() && 
                        request.resource.data.createdBy == request.auth.uid;
       allow update: if isAuthenticated() && 
-                       (resource.data.createdBy == request.auth.uid || isAdmin());
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow updating legacy templates
+                         isAdmin()
+                       );
       allow delete: if isAuthenticated() && 
-                       (resource.data.createdBy == request.auth.uid || isAdmin());
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow deleting legacy templates
+                         isAdmin()
+                       );
     }
     
     // Services - users can ONLY access their own services
+    // MIGRATION MODE: Allow access to services without createdBy field
     match /services/{serviceId} {
       allow read: if isAuthenticated() && 
-                     (resource.data.createdBy == request.auth.uid || isAdmin()) ||
-                     // Allow clients to read their service via token (handled in code)
-                     resource.data.intakeForm.token != null;
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy services
+                       isAdmin()
+                     ) ||
+                     // Allow clients to read their service via token
+                     (resource.data.intakeForm.token != null);
       allow create: if isLawyerOrAdmin() && 
                        request.resource.data.createdBy == request.auth.uid;
       allow update: if isAuthenticated() && 
-                       (resource.data.createdBy == request.auth.uid || isAdmin());
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow updating legacy services
+                         isAdmin()
+                       );
       allow delete: if isAuthenticated() && 
-                       (resource.data.createdBy == request.auth.uid || isAdmin());
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow deleting legacy services
+                         isAdmin()
+                       );
     }
     
     // Intake customizations - users can ONLY access their own customizations
+    // MIGRATION MODE: Allow access to customizations without userId field
     match /intakeCustomizations/{customizationId} {
       allow read: if isAuthenticated() && 
-                     (resource.data.userId == request.auth.uid || isAdmin());
+                     (
+                       resource.data.userId == request.auth.uid || 
+                       !('userId' in resource.data) ||  // Allow legacy customizations
+                       isAdmin()
+                     );
       allow create: if isLawyerOrAdmin() && 
                        request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() && 
-                       (resource.data.userId == request.auth.uid || isAdmin());
+                       (
+                         resource.data.userId == request.auth.uid || 
+                         !('userId' in resource.data) ||  // Allow updating legacy customizations
+                         isAdmin()
+                       );
       allow delete: if isAuthenticated() && 
-                       (resource.data.userId == request.auth.uid || isAdmin());
+                       (
+                         resource.data.userId == request.auth.uid || 
+                         !('userId' in resource.data) ||  // Allow deleting legacy customizations
+                         isAdmin()
+                       );
     }
     
     // Activity logs - users can ONLY see their own activity logs

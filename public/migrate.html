@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCPForms - Data Migration Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .status {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        #log {
+            background: #1a202c;
+            color: #68d391;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            display: none;
+        }
+        
+        #log.active {
+            display: block;
+        }
+        
+        .log-line {
+            margin: 4px 0;
+        }
+        
+        .log-success { color: #68d391; }
+        .log-error { color: #fc8181; }
+        .log-info { color: #63b3ed; }
+        .log-warning { color: #f6ad55; }
+        
+        .warning-box {
+            background: #fffaf0;
+            border: 2px solid #f6ad55;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .warning-box strong {
+            color: #c05621;
+            display: block;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Data Migration Tool</h1>
+        <p class="subtitle">Add ownership fields to existing documents</p>
+        
+        <div class="warning-box">
+            <strong>⚠️ Before Running:</strong>
+            <ul style="margin-left: 20px; color: #744210;">
+                <li>Make sure you're logged into MCPForms</li>
+                <li>All existing data will be assigned to your account</li>
+                <li>This operation cannot be undone</li>
+            </ul>
+        </div>
+        
+        <div class="status">
+            <div class="status-item">
+                <span>User Status:</span>
+                <strong id="userStatus">Checking...</strong>
+            </div>
+            <div class="status-item">
+                <span>Templates to migrate:</span>
+                <strong id="templatesCount">-</strong>
+            </div>
+            <div class="status-item">
+                <span>Services to migrate:</span>
+                <strong id="servicesCount">-</strong>
+            </div>
+            <div class="status-item">
+                <span>Customizations to migrate:</span>
+                <strong id="customizationsCount">-</strong>
+            </div>
+        </div>
+        
+        <button id="migrateBtn" onclick="runMigration()" disabled>
+            Start Migration
+        </button>
+        
+        <div id="log"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, getDocs, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase config - UPDATE THESE VALUES
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEZrEwNAzOrpAvpm6XWuDjaGX4m8DK-cc",
+            authDomain: "formgenai-4545.firebaseapp.com",
+            projectId: "formgenai-4545",
+            storageBucket: "formgenai-4545.firebasestorage.app",
+            messagingSenderId: "34490364510",
+            appId: "1:34490364510:web:9d2ee11114ef80dbfefacf"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        let currentUser = null;
+
+        function log(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            logEl.classList.add('active');
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            line.textContent = message;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function checkUser() {
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById('userStatus').textContent = user.email;
+                    document.getElementById('userStatus').style.color = '#68d391';
+                    
+                    // Check how many documents need migration
+                    await countDocuments();
+                    
+                    document.getElementById('migrateBtn').disabled = false;
+                } else {
+                    document.getElementById('userStatus').textContent = 'Not logged in';
+                    document.getElementById('userStatus').style.color = '#fc8181';
+                    alert('Please login to MCPForms first, then come back to this page.');
+                }
+            });
+        }
+
+        async function countDocuments() {
+            try {
+                const templatesSnap = await getDocs(collection(db, 'templates'));
+                const servicesSnap = await getDocs(collection(db, 'services'));
+                const customizationsSnap = await getDocs(collection(db, 'intakeCustomizations'));
+                
+                const templatesToMigrate = templatesSnap.docs.filter(d => !d.data().createdBy).length;
+                const servicesToMigrate = servicesSnap.docs.filter(d => !d.data().createdBy).length;
+                const customizationsToMigrate = customizationsSnap.docs.filter(d => !d.data().userId).length;
+                
+                document.getElementById('templatesCount').textContent = templatesToMigrate;
+                document.getElementById('servicesCount').textContent = servicesToMigrate;
+                document.getElementById('customizationsCount').textContent = customizationsToMigrate;
+            } catch (error) {
+                log('Error counting documents: ' + error.message, 'error');
+            }
+        }
+
+        window.runMigration = async function() {
+            if (!currentUser) {
+                alert('Please login first!');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to migrate all existing data to your account? This cannot be undone.')) {
+                return;
+            }
+
+            document.getElementById('migrateBtn').disabled = true;
+            document.getElementById('migrateBtn').textContent = 'Migrating...';
+            
+            log('🚀 Starting migration...', 'info');
+            log(`👤 Current user: ${currentUser.email}`, 'info');
+            log('', 'info');
+
+            let updated = 0;
+            let errors = 0;
+
+            // Migrate Templates
+            log('📄 Migrating templates...', 'info');
+            try {
+                const templatesSnap = await getDocs(collection(db, 'templates'));
+                for (const docSnap of templatesSnap.docs) {
+                    const data = docSnap.data();
+                    if (!data.createdBy) {
+                        try {
+                            await updateDoc(doc(db, 'templates', docSnap.id), {
+                                createdBy: currentUser.uid,
+                                updatedAt: new Date()
+                            });
+                            log(`  ✅ Template: ${data.name || docSnap.id}`, 'success');
+                            updated++;
+                        } catch (error) {
+                            log(`  ❌ Failed: ${docSnap.id} - ${error.message}`, 'error');
+                            errors++;
+                        }
+                    }
+                }
+            } catch (error) {
+                log(`❌ Templates error: ${error.message}`, 'error');
+            }
+
+            // Migrate Services
+            log('', 'info');
+            log('🔧 Migrating services...', 'info');
+            try {
+                const servicesSnap = await getDocs(collection(db, 'services'));
+                for (const docSnap of servicesSnap.docs) {
+                    const data = docSnap.data();
+                    if (!data.createdBy) {
+                        try {
+                            await updateDoc(doc(db, 'services', docSnap.id), {
+                                createdBy: currentUser.uid,
+                                updatedAt: new Date()
+                            });
+                            log(`  ✅ Service: ${data.name || docSnap.id}`, 'success');
+                            updated++;
+                        } catch (error) {
+                            log(`  ❌ Failed: ${docSnap.id} - ${error.message}`, 'error');
+                            errors++;
+                        }
+                    }
+                }
+            } catch (error) {
+                log(`❌ Services error: ${error.message}`, 'error');
+            }
+
+            // Migrate Customizations
+            log('', 'info');
+            log('⚙️ Migrating customizations...', 'info');
+            try {
+                const customizationsSnap = await getDocs(collection(db, 'intakeCustomizations'));
+                for (const docSnap of customizationsSnap.docs) {
+                    const data = docSnap.data();
+                    if (!data.userId) {
+                        try {
+                            await updateDoc(doc(db, 'intakeCustomizations', docSnap.id), {
+                                userId: currentUser.uid,
+                                updatedAt: new Date()
+                            });
+                            log(`  ✅ Customization: ${docSnap.id}`, 'success');
+                            updated++;
+                        } catch (error) {
+                            log(`  ❌ Failed: ${docSnap.id} - ${error.message}`, 'error');
+                            errors++;
+                        }
+                    }
+                }
+            } catch (error) {
+                log(`❌ Customizations error: ${error.message}`, 'error');
+            }
+
+            // Summary
+            log('', 'info');
+            log('═'.repeat(50), 'info');
+            log(`📊 Migration Complete!`, 'success');
+            log(`✅ Documents updated: ${updated}`, 'success');
+            log(`❌ Errors: ${errors}`, errors > 0 ? 'error' : 'info');
+            log('═'.repeat(50), 'info');
+
+            if (updated > 0) {
+                log('', 'info');
+                log('🎉 Success! Refresh your MCPForms page to see your data.', 'success');
+            }
+
+            document.getElementById('migrateBtn').textContent = 'Migration Complete!';
+            await countDocuments();
+        };
+
+        // Initialize
+        checkUser();
+    </script>
+</body>
+</html>
