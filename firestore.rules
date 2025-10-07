@@ -21,12 +21,13 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['lawyer', 'admin'];
     }
     
-    // User profiles - users can read their own, admins can read all
+    // User profiles - users can read their own profile
+    // Note: Don't use isAdmin() here to avoid circular dependency
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId);
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow update: if isOwner(userId);
+      allow delete: if false; // Use Firebase Admin SDK for user deletion
     }
     
     // Templates - users can ONLY access their own templates
