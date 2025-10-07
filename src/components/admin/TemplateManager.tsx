@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, doc, deleteDoc, where } from 'firebase/firestore'
+import { collection, query, onSnapshot, doc, deleteDoc, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { LoadingSpinner } from '@/components/ui/loading-components'
@@ -32,9 +32,13 @@ export default function TemplateManager() {
     if (!user?.uid) return
     
     console.log('📊 TemplateManager: Setting up Firestore listener for user:', user.uid)
+    
+    // Optimized query with orderBy and limit
     const q = query(
       collection(db, 'templates'),
-      where('createdBy', '==', user.uid)
+      where('createdBy', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(50) // Limit to 50 most recent templates for performance
     )
     
     const unsubscribe = onSnapshot(q, 
@@ -45,7 +49,7 @@ export default function TemplateManager() {
           ...doc.data()
         })) as Template[]
         
-        setTemplates(templatesData.sort((a, b) => b.createdAt?.toDate() - a.createdAt?.toDate()))
+        setTemplates(templatesData)
         setLoading(false)
       },
       (error) => {
