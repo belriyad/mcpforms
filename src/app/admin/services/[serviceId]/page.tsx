@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import { Service } from '@/types/service'
 import ViewResponsesModal from '@/components/ViewResponsesModal'
 import EditResponsesModal from '@/components/EditResponsesModal'
@@ -30,6 +31,7 @@ import {
 
 export default function ServiceDetailPage({ params }: { params: { serviceId: string } }) {
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const [service, setService] = useState<Service | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,13 +42,29 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
 
   // Load service from Firestore with real-time updates
   useEffect(() => {
+    if (authLoading) return
+    
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
     const serviceRef = doc(db, 'services', params.serviceId)
     
     const unsubscribe = onSnapshot(
       serviceRef,
       (docSnap) => {
         if (docSnap.exists()) {
-          setService({ id: docSnap.id, ...docSnap.data() } as Service)
+          const serviceData = { id: docSnap.id, ...docSnap.data() } as Service
+          
+          // Check if user owns this service
+          if (serviceData.createdBy && serviceData.createdBy !== user.uid) {
+            setError('You do not have permission to view this service')
+            setLoading(false)
+            return
+          }
+          
+          setService(serviceData)
           setError(null)
         } else {
           setError('Service not found')
@@ -55,19 +73,21 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       },
       (err) => {
         console.error('Error loading service:', err)
-        setError('Failed to load service')
+        setError('Failed to load service. You may not have permission to view this service.')
         setLoading(false)
       }
     )
 
     return () => unsubscribe()
-  }, [params.serviceId])
+  }, [params.serviceId, user, authLoading, router])
 
   const getStatusBadge = () => {
-    if (!service) return null
+    if (!service || !service.status) return null
     
     const statusConfig = {
       draft: { label: 'Draft', color: 'gray', icon: Edit },
+      active: { label: 'Active', color: 'green', icon: CheckCircle2 },
+      inactive: { label: 'Inactive', color: 'gray', icon: Clock },
       intake_sent: { label: 'Intake Sent', color: 'blue', icon: Mail },
       intake_submitted: { label: 'Pending Review', color: 'yellow', icon: Clock },
       documents_ready: { label: 'Ready', color: 'green', icon: CheckCircle2 },
@@ -75,6 +95,17 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
     }
 
     const config = statusConfig[service.status as keyof typeof statusConfig]
+    
+    // If status doesn't match any known config, show a default badge
+    if (!config) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border bg-gray-100 text-gray-700 border-gray-300">
+          <Edit className="w-4 h-4" />
+          {service.status || 'Unknown'}
+        </span>
+      )
+    }
+    
     const Icon = config.icon
     
     const colors: Record<string, string> = {
@@ -128,7 +159,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   }
 
   // Loading state
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
@@ -181,17 +212,25 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{service.name}</h1>
-              <div className="flex items-center gap-4 text-gray-600 mb-3">
-                <span className="flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  {service.clientName}
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  {service.clientEmail}
-                </span>
-                <span>•</span>
+              <div className="flex items-center gap-4 text-gray-600 mb-3 flex-wrap">
+                {service.clientName && (
+                  <>
+                    <span className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      {service.clientName}
+                    </span>
+                    <span>•</span>
+                  </>
+                )}
+                {service.clientEmail && (
+                  <>
+                    <span className="flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      {service.clientEmail}
+                    </span>
+                    <span>•</span>
+                  </>
+                )}
                 <span className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
                   Created {service.createdAt ? new Date(service.createdAt as any).toLocaleDateString() : 'Unknown'}
