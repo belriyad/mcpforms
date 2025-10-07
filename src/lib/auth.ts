@@ -63,16 +63,13 @@ export async function signIn(email: string, password: string) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
 
-    // Update last login
-    await setDoc(doc(db, 'users', user.uid), {
+    // Update last login asynchronously (don't wait for it)
+    setDoc(doc(db, 'users', user.uid), {
       lastLogin: new Date().toISOString()
-    }, { merge: true })
+    }, { merge: true }).catch(err => console.error('Failed to update lastLogin:', err))
 
-    // Get user profile
-    const userDoc = await getDoc(doc(db, 'users', user.uid))
-    const userProfile = userDoc.data() as UserProfile
-
-    return { success: true, user: userProfile }
+    // Don't fetch profile here - AuthProvider will do it
+    return { success: true }
   } catch (error: any) {
     console.error('Sign in error:', error)
     return { 
@@ -115,19 +112,44 @@ export async function resetPassword(email: string) {
   }
 }
 
+// Simple in-memory cache for user profiles
+const profileCache = new Map<string, { profile: UserProfile, timestamp: number }>()
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
 /**
  * Get current user profile
  */
 export async function getCurrentUserProfile(user: User): Promise<UserProfile | null> {
   try {
+    // Check cache first
+    const cached = profileCache.get(user.uid)
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log('Using cached profile for', user.uid)
+      return cached.profile
+    }
+
     const userDoc = await getDoc(doc(db, 'users', user.uid))
     if (userDoc.exists()) {
-      return userDoc.data() as UserProfile
+      const profile = userDoc.data() as UserProfile
+      // Cache the profile
+      profileCache.set(user.uid, { profile, timestamp: Date.now() })
+      return profile
     }
     return null
   } catch (error) {
     console.error('Get user profile error:', error)
     return null
+  }
+}
+
+/**
+ * Clear profile cache (useful after profile updates)
+ */
+export function clearProfileCache(uid?: string) {
+  if (uid) {
+    profileCache.delete(uid)
+  } else {
+    profileCache.clear()
   }
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, onSnapshot, where } from 'firebase/firestore'
+import { collection, query, onSnapshot, where, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { signOut } from '@/lib/auth'
@@ -43,49 +43,74 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!user?.uid) return
     
-    const unsubscribers: (() => void)[] = []
+    let unsubscribers: (() => void)[] = []
+    let mounted = true
 
-    // Templates count - filter by current user
-    const templatesQuery = query(
-      collection(db, 'templates'),
-      where('createdBy', '==', user.uid)
-    )
-    const unsubTemplates = onSnapshot(templatesQuery, (snapshot) => {
-      setStats(prev => ({ ...prev, templates: snapshot.size }))
-    })
-    unsubscribers.push(unsubTemplates)
+    // Load stats with a slight delay to prioritize rendering
+    const loadStats = async () => {
+      try {
+        // Templates count - filter by current user (use limit for faster initial load)
+        const templatesQuery = query(
+          collection(db, 'templates'),
+          where('createdBy', '==', user.uid),
+          limit(100) // Limit initial load
+        )
+        const unsubTemplates = onSnapshot(templatesQuery, (snapshot) => {
+          if (mounted) {
+            setStats(prev => ({ ...prev, templates: snapshot.size }))
+          }
+        })
+        unsubscribers.push(unsubTemplates)
 
-    // Services count - filter by current user
-    const servicesQuery = query(
-      collection(db, 'services'),
-      where('createdBy', '==', user.uid)
-    )
-    const unsubServices = onSnapshot(servicesQuery, (snapshot) => {
-      setStats(prev => ({ ...prev, services: snapshot.size }))
-    })
-    unsubscribers.push(unsubServices)
+        // Services count - filter by current user
+        const servicesQuery = query(
+          collection(db, 'services'),
+          where('createdBy', '==', user.uid),
+          limit(100)
+        )
+        const unsubServices = onSnapshot(servicesQuery, (snapshot) => {
+          if (mounted) {
+            setStats(prev => ({ ...prev, services: snapshot.size }))
+          }
+        })
+        unsubscribers.push(unsubServices)
 
-    // Intakes count - filter by current user
-    const intakesQuery = query(
-      collection(db, 'intakeSubmissions'),
-      where('createdBy', '==', user.uid)
-    )
-    const unsubIntakes = onSnapshot(intakesQuery, (snapshot) => {
-      setStats(prev => ({ ...prev, intakes: snapshot.size }))
-    })
-    unsubscribers.push(unsubIntakes)
+        // Intakes count - filter by current user
+        const intakesQuery = query(
+          collection(db, 'intakeSubmissions'),
+          where('createdBy', '==', user.uid),
+          limit(100)
+        )
+        const unsubIntakes = onSnapshot(intakesQuery, (snapshot) => {
+          if (mounted) {
+            setStats(prev => ({ ...prev, intakes: snapshot.size }))
+          }
+        })
+        unsubscribers.push(unsubIntakes)
 
-    // Customizations count - filter by current user
-    const customizationsQuery = query(
-      collection(db, 'intakeCustomizations'),
-      where('userId', '==', user.uid)
-    )
-    const unsubCustomizations = onSnapshot(customizationsQuery, (snapshot) => {
-      setStats(prev => ({ ...prev, customizations: snapshot.size }))
-    })
-    unsubscribers.push(unsubCustomizations)
+        // Customizations count - filter by current user
+        const customizationsQuery = query(
+          collection(db, 'intakeCustomizations'),
+          where('userId', '==', user.uid),
+          limit(100)
+        )
+        const unsubCustomizations = onSnapshot(customizationsQuery, (snapshot) => {
+          if (mounted) {
+            setStats(prev => ({ ...prev, customizations: snapshot.size }))
+          }
+        })
+        unsubscribers.push(unsubCustomizations)
+      } catch (error) {
+        console.error('Error loading stats:', error)
+      }
+    }
+
+    // Delay loading stats to let the page render first
+    const timeoutId = setTimeout(loadStats, 100)
 
     return () => {
+      mounted = false
+      clearTimeout(timeoutId)
       unsubscribers.forEach(unsub => unsub())
     }
   }, [user?.uid])
