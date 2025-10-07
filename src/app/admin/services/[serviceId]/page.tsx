@@ -229,11 +229,11 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            Templates ({service.templates.length})
+            Templates ({service.templates?.length || 0})
           </h2>
 
           <div className="space-y-3">
-            {service.templates?.map((template) => (
+            {service.templates && service.templates.length > 0 ? service.templates.map((template) => (
               <div
                 key={template.id}
                 className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-all"
@@ -265,7 +265,12 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                   </div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-8 text-gray-500">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p>No templates assigned to this service</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -287,15 +292,15 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <p className="text-gray-600">Total Fields</p>
-                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.totalFields}</p>
+                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.totalFields || 0}</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Unique Fields</p>
-                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.uniqueFields}</p>
+                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.uniqueFields || 0}</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Duplicates Removed</p>
-                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.duplicatesRemoved}</p>
+                    <p className="text-lg font-semibold text-gray-900">{service.intakeForm.duplicatesRemoved || 0}</p>
                   </div>
                 </div>
               </div>
@@ -320,20 +325,22 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                   )}
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-3 mb-3">
-                  <p className="text-sm text-gray-600 mb-2">Intake Form Link:</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-sm bg-white px-3 py-2 rounded border border-gray-200 font-mono break-all">
-                      {service.intakeForm.link}
-                    </code>
-                    <button
-                      onClick={() => window.open(service.intakeForm?.link, '_blank')}
-                      className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
+                {service.intakeForm.link && (
+                  <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                    <p className="text-sm text-gray-600 mb-2">Intake Form Link:</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-sm bg-white px-3 py-2 rounded border border-gray-200 font-mono break-all">
+                        {service.intakeForm.link}
+                      </code>
+                      <button
+                        onClick={() => window.open(service.intakeForm?.link, '_blank')}
+                        className="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex items-center gap-2">
                   <button

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/firebase'
 import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { sendEmail, isEmailConfigured } from '@/lib/email'
+import { createSubmissionNotificationEmail } from '@/lib/email-templates'
 
 export async function POST(
   request: NextRequest,
@@ -70,8 +72,41 @@ export async function POST(
 
     console.log('✅ Intake form submitted successfully for service:', serviceDoc.id)
 
-    // TODO: Send email notification to lawyer
-    // await sendEmailToLawyer(service.lawyerEmail, serviceDoc.id)
+    // Send email notification to lawyer
+    if (isEmailConfigured() && service.lawyerEmail) {
+      try {
+        const serviceUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/services/${serviceDoc.id}`
+        
+        const { subject, html } = createSubmissionNotificationEmail({
+          lawyerName: service.lawyerName || 'Lawyer',
+          lawyerEmail: service.lawyerEmail,
+          clientName: service.clientName,
+          clientEmail: service.clientEmail,
+          serviceName: service.name,
+          serviceId: serviceDoc.id,
+          serviceUrl,
+          totalFields: Object.keys(formData).length,
+          submittedAt: new Date().toLocaleString()
+        })
+
+        const emailResult = await sendEmail({
+          to: service.lawyerEmail,
+          subject,
+          html
+        })
+
+        if (emailResult.success) {
+          console.log('✅ Lawyer notification email sent')
+        } else {
+          console.error('❌ Failed to send lawyer notification:', emailResult.error)
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending lawyer notification:', emailError)
+        // Don't fail the submission if email fails
+      }
+    } else {
+      console.warn('⚠️ Email not configured or no lawyer email - notification not sent')
+    }
 
     return NextResponse.json({
       success: true,

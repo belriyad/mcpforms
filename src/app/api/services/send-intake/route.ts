@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { sendEmail, isEmailConfigured } from '@/lib/email'
+import { createIntakeEmail } from '@/lib/email-templates'
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,41 +31,55 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Implement actual email sending (e.g., using SendGrid, AWS SES, etc.)
-    // For now, we'll just update the status and timestamp
-    
     console.log(`📧 Sending intake form to ${serviceData.clientEmail}`)
-    console.log(`Link: ${serviceData.intakeForm.link}`)
     
-    // Simulated email content
-    const emailContent = {
-      to: serviceData.clientEmail,
-      subject: `${serviceData.name} - Intake Form Required`,
-      html: `
-        <h2>Hello ${serviceData.clientName},</h2>
-        <p>Your lawyer has prepared an intake form for: <strong>${serviceData.name}</strong></p>
-        <p>Please click the link below to fill out the form:</p>
-        <p><a href="${serviceData.intakeForm.link}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px;">Fill Out Intake Form</a></p>
-        <p>Or copy this link: ${serviceData.intakeForm.link}</p>
-        <p>If you have any questions, please contact your lawyer directly.</p>
-        <p>Best regards,<br/>Smart Forms AI</p>
-      `
-    }
+    let emailResult = null
+    let emailSent = false
 
-    // Log email for development
-    console.log('📧 Email Content:', emailContent)
+    // Send email if configured
+    if (isEmailConfigured()) {
+      const { subject, html } = createIntakeEmail({
+        clientName: serviceData.clientName,
+        lawyerName: serviceData.lawyerName || 'Your Lawyer',
+        serviceName: serviceData.name,
+        intakeLink: serviceData.intakeForm.link,
+        expiresInDays: 7
+      })
+
+      emailResult = await sendEmail({
+        to: serviceData.clientEmail,
+        subject,
+        html,
+        replyTo: process.env.RESEND_REPLY_TO_EMAIL
+      })
+
+      emailSent = emailResult.success
+      
+      if (emailResult.success) {
+        console.log('✅ Intake email sent successfully')
+      } else {
+        console.error('❌ Failed to send email:', emailResult.error)
+      }
+    } else {
+      console.warn('⚠️ Email not configured - link generated but email not sent')
+    }
 
     // Update service status
     await updateDoc(doc(db, 'services', serviceId), {
       status: 'intake_sent',
-      intakeFormSentAt: new Date().toISOString(),
+      intakeFormSentAt: serverTimestamp(),
+      emailSent,
       updatedAt: serverTimestamp()
     })
 
     return NextResponse.json({
       success: true,
-      message: `Intake form sent to ${serviceData.clientEmail}`,
-      emailPreview: emailContent // For development/testing
+      message: emailSent 
+        ? `Intake form sent to ${serviceData.clientEmail}`
+        : 'Intake form generated. Email service not configured - please share link manually.',
+      intakeLink: serviceData.intakeForm.link,
+      emailSent,
+      emailId: emailResult?.id
     })
   } catch (error) {
     console.error('Error sending intake form:', error)
