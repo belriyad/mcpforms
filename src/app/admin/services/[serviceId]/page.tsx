@@ -459,8 +459,8 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                         <div>
                           <h4 className="font-medium text-gray-900">{doc.fileName}</h4>
                           <p className="text-sm text-gray-500">
-                            Generated from {doc.templateName}
-                            {doc.populatedFields && ` • ${Object.keys(doc.populatedFields).length} fields populated`}
+                            Generated from {doc.templateName || 'template'}
+                            {doc.populatedFields && typeof doc.populatedFields === 'object' && ` • ${Object.keys(doc.populatedFields).length} fields populated`}
                           </p>
                         </div>
                       </div>

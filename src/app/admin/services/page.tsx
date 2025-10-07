@@ -42,28 +42,42 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | Service['status']>('all')
+  const [error, setError] = useState<string | null>(null)
 
   // Load services from Firestore
   useEffect(() => {
-    const servicesQuery = query(
-      collection(db, 'services'),
-      orderBy('createdAt', 'desc')
-    )
-    
-    const unsubscribe = onSnapshot(servicesQuery, (snapshot) => {
-      const servicesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Service[]
+    try {
+      const servicesQuery = query(
+        collection(db, 'services'),
+        orderBy('createdAt', 'desc')
+      )
       
-      setServices(servicesData)
-      setLoading(false)
-    }, (error) => {
-      console.error('Error loading services:', error)
-      setLoading(false)
-    })
+      const unsubscribe = onSnapshot(servicesQuery, (snapshot) => {
+        try {
+          const servicesData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Service[]
+          
+          setServices(servicesData)
+          setError(null)
+        } catch (err) {
+          console.error('Error processing services:', err)
+          setError('Failed to process services data')
+        }
+        setLoading(false)
+      }, (error) => {
+        console.error('Error loading services:', error)
+        setError('Failed to load services')
+        setLoading(false)
+      })
 
-    return () => unsubscribe()
+      return () => unsubscribe()
+    } catch (err) {
+      console.error('Error setting up services listener:', err)
+      setError('Failed to initialize services')
+      setLoading(false)
+    }
   }, [])
 
   const filteredServices = filter === 'all' 
@@ -72,6 +86,15 @@ export default function ServicesPage() {
 
   const getStatusBadge = (status: Service['status']) => {
     const config = STATUS_CONFIG[status]
+    if (!config) {
+      // Fallback for unknown status
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border bg-gray-100 text-gray-700 border-gray-300">
+          {status || 'Unknown'}
+        </span>
+      )
+    }
+    
     const Icon = config.icon
     const colors: Record<string, string> = {
       gray: 'bg-gray-100 text-gray-700 border-gray-300',
@@ -114,6 +137,18 @@ export default function ServicesPage() {
           <div className="bg-white rounded-xl p-12 shadow-sm border border-gray-200 mb-8 text-center">
             <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
             <p className="text-gray-600">Loading services...</p>
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-12 text-center mb-8">
+            <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Services</h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Reload Page
+            </button>
           </div>
         ) : (
           <>
@@ -232,7 +267,7 @@ export default function ServicesPage() {
                       <span>•</span>
                       <span>Client: {service.clientName}</span>
                       <span>•</span>
-                      <span>Updated {service.updatedAt?.toDate?.()?.toLocaleDateString() || 'Recently'}</span>
+                      <span>Updated {service.updatedAt ? (typeof service.updatedAt.toDate === 'function' ? service.updatedAt.toDate().toLocaleDateString() : new Date(service.updatedAt).toLocaleDateString()) : 'Recently'}</span>
                     </div>
                     <p className="text-sm text-gray-500">{service.clientEmail}</p>
                   </div>
