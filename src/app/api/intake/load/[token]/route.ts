@@ -21,8 +21,13 @@ export async function GET(
 
     // Query services collection for intake form with matching token
     const servicesRef = collection(db, 'services')
+    console.log('📡 Querying services with intakeForm.token ==', token)
+    
     const q = query(servicesRef, where('intakeForm.token', '==', token))
+    console.log('📡 Executing query...')
+    
     const querySnapshot = await getDocs(q)
+    console.log('📡 Query completed. Results:', querySnapshot.size)
 
     if (querySnapshot.empty) {
       console.log('❌ No service found with token:', token)
@@ -79,11 +84,17 @@ export async function GET(
     })
   } catch (error) {
     console.error('❌ Error loading intake form:', error)
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
 
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to load intake form',
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )

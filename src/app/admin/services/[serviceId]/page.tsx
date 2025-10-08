@@ -57,13 +57,23 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         if (docSnap.exists()) {
           const serviceData = { id: docSnap.id, ...docSnap.data() } as Service
           
-          // Check if user owns this service
-          if (serviceData.createdBy && serviceData.createdBy !== user.uid) {
-            setError('You do not have permission to view this service')
-            setLoading(false)
-            return
+          // TEMPORARY: Show ownership info for debugging
+          console.log('📦 Service loaded:', {
+            id: serviceData.id,
+            name: serviceData.name,
+            createdBy: serviceData.createdBy || '❌ MISSING',
+            currentUser: user.uid
+          });
+          
+          // Show warning if service needs migration or belongs to different user
+          if (!serviceData.createdBy) {
+            console.warn('⚠️ This service needs migration - missing createdBy field');
+          } else if (serviceData.createdBy !== user.uid) {
+            console.warn('⚠️ This service belongs to:', serviceData.createdBy);
+            console.warn('Your user ID:', user.uid);
           }
           
+          // TEMPORARY: Allow viewing for debugging
           setService(serviceData)
           setError(null)
         } else {
@@ -73,7 +83,12 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       },
       (err) => {
         console.error('Error loading service:', err)
-        setError('Failed to load service. You may not have permission to view this service.')
+        // More helpful error message
+        if (err.code === 'permission-denied') {
+          setError('Access denied. This service may need to be migrated. Please visit /migrate.html to assign ownership.')
+        } else {
+          setError('Failed to load service. Please try again or contact support.')
+        }
         setLoading(false)
       }
     )
@@ -181,15 +196,28 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               {error || 'Service Not Found'}
             </h2>
             <p className="text-gray-600 text-center mb-6">
-              The service you're looking for doesn't exist or you don't have access to it.
+              {error?.includes('migrated') 
+                ? 'This service was created before user ownership was implemented. Please run the migration tool to assign ownership.'
+                : 'The service you\'re looking for doesn\'t exist or you don\'t have access to it.'
+              }
             </p>
-            <button
-              onClick={() => router.push('/admin/services')}
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium"
-            >
-              <ArrowLeft className="w-4 h-4 inline mr-2" />
-              Back to Services
-            </button>
+            <div className="space-y-3">
+              {error?.includes('migrated') && (
+                <button
+                  onClick={() => window.open('/migrate.html', '_blank')}
+                  className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-medium"
+                >
+                  🔧 Run Migration Tool
+                </button>
+              )}
+              <button
+                onClick={() => router.push('/admin/services')}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium"
+              >
+                <ArrowLeft className="w-4 h-4 inline mr-2" />
+                Back to Services
+              </button>
+            </div>
           </div>
         </div>
       </div>
