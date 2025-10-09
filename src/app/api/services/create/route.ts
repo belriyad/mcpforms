@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
 import { CreateServiceRequest } from '@/types/service'
+import { FieldValue } from 'firebase-admin/firestore'
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Firebase Admin is initialized
+    if (!isAdminInitialized()) {
+      return NextResponse.json(
+        { error: 'Server configuration error - Firebase Admin not initialized' },
+        { status: 500 }
+      )
+    }
+
     const body: CreateServiceRequest = await request.json()
     
     // Validate required fields
@@ -32,7 +40,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create service document with user's ID
+    // Create service document with user's ID using Firebase Admin SDK
+    const adminDb = getAdminDb()
     const serviceData = {
       name: body.name,
       description: body.description || '',
@@ -42,11 +51,11 @@ export async function POST(request: NextRequest) {
       templateIds: body.templateIds,
       templates: [], // Will be populated in next step
       createdBy: body.createdBy, // User ID from authenticated request
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
     }
 
-    const docRef = await addDoc(collection(db, 'services'), serviceData)
+    const docRef = await adminDb.collection('services').add(serviceData)
 
     return NextResponse.json(
       { 

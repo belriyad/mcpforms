@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Firebase Admin is initialized
+    if (!isAdminInitialized()) {
+      return NextResponse.json(
+        { error: 'Server configuration error - Firebase Admin not initialized' },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json()
     const { serviceId, templateIds } = body
 
@@ -14,14 +22,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const adminDb = getAdminDb()
+
     // Fetch template details for each selected template
     const templateDetails = await Promise.all(
       templateIds.map(async (templateId: string) => {
-        const templateDoc = await getDoc(doc(db, 'templates', templateId))
-        if (!templateDoc.exists()) {
+        const templateDoc = await adminDb.collection('templates').doc(templateId).get()
+        if (!templateDoc.exists) {
           throw new Error(`Template ${templateId} not found`)
         }
-        const templateData = templateDoc.data()
+        const templateData = templateDoc.data()!
         return {
           id: `st_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           templateId: templateDoc.id,
@@ -38,9 +48,9 @@ export async function POST(request: NextRequest) {
     )
 
     // Update service with template details
-    await updateDoc(doc(db, 'services', serviceId), {
+    await adminDb.collection('services').doc(serviceId).update({
       templates: templateDetails,
-      updatedAt: serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({
