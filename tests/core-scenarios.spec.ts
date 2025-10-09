@@ -256,27 +256,24 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
   } // End of useExistingAccount if/else
     
     // ========================================
-    // STEP 2: CREATE A SERVICE
+    // STEP 2: CREATE A SERVICE (4-STEP WIZARD)
     // ========================================
     console.log('\n🎯 STEP 2/9: CREATE A SERVICE');
     console.log('-'.repeat(60));
     
     let serviceId = '';
     try {
-      await page.goto(`${PRODUCTION_URL}/admin/services`);
+      // Navigate to new service creation wizard
+      console.log('📍 Navigating to service creation wizard...');
+      await page.goto(`${PRODUCTION_URL}/admin/services/create`);
       await waitForPageReady(page);
-      await page.waitForTimeout(2000); // Wait for Firestore data to load
-      await takeScreenshot(page, '04-services-page', 'Services page loaded');
-      
-      const createButton = page.getByRole('button', { name: /create service|new service|\+ service/i }).first();
-      await expect(createButton).toBeVisible({ timeout: 10000 });
-      await safeClick(page, createButton, 'Create Service button');
-      
-      await page.waitForTimeout(1000);
-      await takeScreenshot(page, '05-create-service-modal', 'Create service modal opened');
+      await page.waitForTimeout(2000);
+      await takeScreenshot(page, '04-wizard-step1', 'Wizard Step 1: Service Details');
       
       const serviceName = `E2E Test Service ${timestamp}`;
-      // Use placeholder since labels are not connected to inputs
+      
+      // WIZARD STEP 1: Service Details
+      console.log('📝 Wizard Step 1: Filling service details...');
       const serviceNameFilled = await safeFill(
         page, 
         page.getByPlaceholder(/will preparation|business contract|service/i).first(), 
@@ -287,7 +284,6 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
         throw new Error('Could not find or fill service name field');
       }
       
-      // Fill Client Name (required!)
       const clientNameFilled = await safeFill(
         page,
         page.getByPlaceholder(/john doe|client name/i).first(),
@@ -298,7 +294,6 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
         throw new Error('Could not find or fill client name field');
       }
       
-      // Fill Client Email (required!)
       const clientEmailFilled = await safeFill(
         page,
         page.getByPlaceholder(/client@example|email/i).first(),
@@ -309,35 +304,116 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
         throw new Error('Could not find or fill client email field');
       }
       
-      // Description field also uses placeholder (optional)
       const descriptionInput = page.getByPlaceholder(/brief description|description/i).first();
       if (await descriptionInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await safeFill(page, descriptionInput, 'Automated E2E test service created by Playwright', 'Service description');
+        await safeFill(page, descriptionInput, 'Automated E2E test service', 'Service description');
       }
       
-      await takeScreenshot(page, '06-service-form-filled', 'Service form completed');
+      await takeScreenshot(page, '05-wizard-step1-filled', 'Step 1 filled');
       
-      // Button is called "Next" not "Save" or "Create"
-      const nextButton = page.getByRole('button', { name: /next/i });
-      await safeClick(page, nextButton, 'Next button');
+      // Click Next to go to Step 2
+      const nextButton1 = page.getByRole('button', { name: /next/i });
+      await safeClick(page, nextButton1, 'Next to Step 2');
+      await page.waitForTimeout(1000);
       
-      console.log('⏳ Waiting for service creation...');
-      await page.waitForTimeout(2000);
+      // WIZARD STEP 2: Template Selection
+      console.log('📝 Wizard Step 2: Selecting templates...');
+      await page.waitForTimeout(2000); // Give templates time to load
+      await takeScreenshot(page, '06-wizard-step2', 'Wizard Step 2: Template Selection');
+      
+      // Wait for templates to load - look for either loading spinner or template content
+      try {
+        // Wait for loading to finish
+        await page.waitForSelector('text=/Loading templates/i', { state: 'hidden', timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(1000);
+      } catch (e) {
+        console.log('⏳ Waiting for templates to load...');
+      }
+      
+      // Try multiple selectors to find template cards
+      let templateSelected = false;
+      
+      // Strategy 1: Look for the clickable template divs
+      const templateCards = page.locator('div').filter({ hasText: /fields.*Last updated/i });
+      const cardCount = await templateCards.count();
+      console.log(`📋 Strategy 1: Found ${cardCount} template cards`);
+      
+      if (cardCount > 0) {
+        await templateCards.first().click();
+        console.log('✅ Selected template using Strategy 1');
+        templateSelected = true;
+      } else {
+        // Strategy 2: Click any div that contains template name (look for our known templates)
+        const knownTemplate = page.locator('text=/Warranty Deed|Trust|Certificate/i').first();
+        if (await knownTemplate.isVisible({ timeout: 3000 }).catch(() => false)) {
+          // Click the parent card
+          await knownTemplate.locator('..').locator('..').click();
+          console.log('✅ Selected template using Strategy 2');
+          templateSelected = true;
+        } else {
+          // Strategy 3: Just click the first clickable div in the template area
+          const anyClickable = page.locator('[class*="cursor-pointer"]').first();
+          if (await anyClickable.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await anyClickable.click();
+            console.log('✅ Selected template using Strategy 3');
+            templateSelected = true;
+          }
+        }
+      }
+      
+      if (templateSelected) {
+        await page.waitForTimeout(500);
+        // Verify selection
+        const selectionMessage = page.locator('text=/\\d+ template.*selected/i');
+        if (await selectionMessage.isVisible({ timeout: 2000 }).catch(() => false)) {
+          const text = await selectionMessage.textContent();
+          console.log(`✅ Selection confirmed: ${text}`);
+        }
+      } else {
+        console.log('⚠️ Could not select any template');
+      }
+      
+      await takeScreenshot(page, '07-wizard-step2-selected', 'Step 2 template selected');
+      
+      // Click Next to go to Step 3
+      const nextButton2 = page.getByRole('button', { name: /next/i });
+      await safeClick(page, nextButton2, 'Next to Step 3');
+      await page.waitForTimeout(1000);
+      
+      // WIZARD STEP 3: Customize (optional - can skip)
+      console.log('📝 Wizard Step 3: Customize (skipping AI customization)');
+      await takeScreenshot(page, '08-wizard-step3', 'Wizard Step 3: Customize');
+      
+      // Click Next to go to Step 4
+      const nextButton3 = page.getByRole('button', { name: /next/i });
+      await safeClick(page, nextButton3, 'Next to Step 4');
+      await page.waitForTimeout(1000);
+      
+      // WIZARD STEP 4: Review & Send
+      console.log('📝 Wizard Step 4: Review & Send');
+      await takeScreenshot(page, '09-wizard-step4', 'Wizard Step 4: Review');
+      
+      // Click "Create & Send" or "Finish" button
+      const createButton = page.getByRole('button', { name: /create & send|create|finish/i });
+      await safeClick(page, createButton, 'Create & Send button');
+      
+      console.log('⏳ Creating service and sending intake...');
+      await page.waitForTimeout(3000); // Wait for service creation
       
       // Wait for redirect to service detail page
-      await page.waitForURL(/\/admin\/services\/[^/]+/, { timeout: 15000, waitUntil: 'domcontentloaded' });
+      await page.waitForURL(/\/admin\/services\/[^/]+$/, { timeout: 30000, waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
       
-      serviceId = page.url().split('/').pop()!;
+      serviceId = page.url().split('/services/')[1];
       
-      await takeScreenshot(page, '07-service-created', 'Service created successfully');
+      await takeScreenshot(page, '10-service-created', 'Service created successfully');
       console.log('✅ STEP 2 COMPLETE: Service created successfully!');
       console.log(`   Service Name: ${serviceName}`);
       console.log(`   Service ID: ${serviceId}`);
       
     } catch (error) {
       console.error('❌ STEP 2 FAILED:', error);
-      await takeScreenshot(page, '07-error-service-creation', 'Error during service creation');
+      await takeScreenshot(page, '10-error-service-creation', 'Error during service creation');
       throw error;
     }
     
@@ -349,21 +425,17 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
     
     let intakeToken = '';
     try {
+      console.log('🔍 Looking for intake generation status...');
       await page.waitForTimeout(2000); // Wait for service page to stabilize
-      await takeScreenshot(page, '08-before-intake-generation', 'Service page before intake generation');
+      await takeScreenshot(page, '11-service-detail-page', 'Service detail page loaded');
       
-      const generateIntakeButton = page.getByRole('button', { name: /generate intake|create intake|generate form/i });
+      // The wizard's final step automatically generates the intake, so check if it's already generated
+      // Look for intake URL or intake token on the page
+      const pageText = await page.locator('body').textContent();
+      const hasIntakeToken = pageText?.includes('intake_') || pageText?.includes('/intake/');
       
-      if (await generateIntakeButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await safeClick(page, generateIntakeButton, 'Generate Intake button');
-        
-        console.log('⏳ Generating intake form (this may take a moment)...');
-        await page.waitForTimeout(5000); // AI generation takes time
-        
-        await takeScreenshot(page, '09-intake-generating', 'Intake generation in progress');
-        
-        // Wait a bit more for generation to complete
-        await page.waitForTimeout(3000);
+      if (hasIntakeToken) {
+        console.log('✅ Intake form already generated by wizard!');
         
         // Try multiple strategies to find the intake token
         const strategies = [
@@ -387,7 +459,6 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
           },
           // Strategy 3: Search in page text
           async () => {
-            const pageText = await page.locator('body').textContent();
             const tokenMatch = pageText?.match(/intake_\w+/);
             return tokenMatch ? tokenMatch[0] : '';
           }
@@ -399,23 +470,79 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
         }
         
         if (intakeToken) {
-          await takeScreenshot(page, '10-intake-generated', 'Intake form generated successfully');
-          console.log('✅ STEP 3 COMPLETE: Intake form generated!');
-          console.log(`   Token: ${intakeToken}`);
-          console.log(`   URL: ${PRODUCTION_URL}/intake/${intakeToken}`);
+          console.log('✅ STEP 3 COMPLETE: Intake form available!');
+          console.log(`   Intake Token: ${intakeToken}`);
         } else {
-          console.log('⚠️  Could not extract intake token from page');
-          await takeScreenshot(page, '10-intake-token-not-found', 'Could not find intake token');
+          console.log('⚠️ Intake generated but token not found in page - continuing anyway');
         }
       } else {
-        console.log('⚠️  Generate Intake button not found');
-        console.log('   This might require templates to be uploaded first');
-        await takeScreenshot(page, '10-no-generate-button', 'Generate button not available');
+        // If not auto-generated, look for "Generate Intake" button
+        console.log('🔍 Intake not auto-generated, looking for Generate button...');
+        await takeScreenshot(page, '11-before-intake-generation', 'Before intake generation');
+        
+        const generateIntakeButton = page.getByRole('button', { name: /generate intake|create intake|generate form/i });
+        
+        if (await generateIntakeButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await safeClick(page, generateIntakeButton, 'Generate Intake button');
+          
+          console.log('⏳ Generating intake form (this may take a moment)...');
+          await page.waitForTimeout(5000); // AI generation takes time
+          
+          await takeScreenshot(page, '12-intake-generating', 'Intake generation in progress');
+          
+          // Wait a bit more for generation to complete
+          await page.waitForTimeout(3000);
+          
+          // Try multiple strategies to find the intake token
+          const strategies = [
+            // Strategy 1: Look for link element
+            async () => {
+              const intakeLinkElement = page.locator('a[href*="/intake/"]').first();
+              if (await intakeLinkElement.isVisible({ timeout: 3000 }).catch(() => false)) {
+                const href = await intakeLinkElement.getAttribute('href');
+                return href?.split('/intake/')[1] || '';
+              }
+              return '';
+            },
+            // Strategy 2: Look for input with intake URL
+            async () => {
+              const input = page.locator('input[value*="/intake/"]').first();
+              if (await input.isVisible({ timeout: 3000 }).catch(() => false)) {
+                const value = await input.getAttribute('value');
+                return value?.split('/intake/')[1] || '';
+              }
+              return '';
+            },
+            // Strategy 3: Search in page text
+            async () => {
+              const pageText = await page.locator('body').textContent();
+              const tokenMatch = pageText?.match(/intake_\w+/);
+              return tokenMatch ? tokenMatch[0] : '';
+            }
+          ];
+          
+          for (const strategy of strategies) {
+            intakeToken = await strategy();
+            if (intakeToken) break;
+          }
+          
+          if (intakeToken) {
+            await takeScreenshot(page, '13-intake-generated', 'Intake form generated');
+            console.log('✅ STEP 3 COMPLETE: Intake form generated successfully!');
+            console.log(`   Intake Token: ${intakeToken}`);
+          } else {
+            console.log('⚠️ Generate Intake clicked but token not found - may still be processing');
+            await takeScreenshot(page, '13-intake-no-token', 'Intake generation - no token yet');
+          }
+        } else {
+          console.log('⚠️ Generate Intake button not found');
+          await takeScreenshot(page, '12-no-generate-button', 'No Generate Intake button visible');
+        }
       }
       
     } catch (error) {
       console.error('❌ STEP 3 FAILED:', error);
-      await takeScreenshot(page, '10-error-intake-generation', 'Error during intake generation');
+      await takeScreenshot(page, '13-error-intake-generation', 'Error during intake generation');
       // Don't throw - continue with other tests
     }
     
@@ -433,9 +560,8 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
         await page.goto(intakeUrl);
         await page.waitForLoadState('domcontentloaded');
         await page.waitForTimeout(2000);
-        await page.waitForTimeout(2000);
         
-        await takeScreenshot(page, '11-intake-form-loaded', 'Intake form opened as client');
+        await takeScreenshot(page, '14-intake-form-loaded', 'Intake form opened as client');
         
         const hasError = await page.locator('text=/error|not found|invalid/i').isVisible({ timeout: 3000 }).catch(() => false);
         
@@ -448,7 +574,7 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
         
       } catch (error) {
         console.error('❌ STEP 4 FAILED:', error);
-        await takeScreenshot(page, '11-error-intake-loading', 'Error loading intake form');
+        await takeScreenshot(page, '14-error-intake-loading', 'Error loading intake form');
         throw error;
       }
       
@@ -540,13 +666,13 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
           }
         }
         
-        await takeScreenshot(page, '12-intake-form-filled', 'Intake form completed');
+        await takeScreenshot(page, '15-intake-form-filled', 'Intake form completed');
         console.log('✅ STEP 5 COMPLETE: Form filled successfully!');
         console.log(`   Total fields filled: ${filledCount}`);
         
       } catch (error) {
         console.error('❌ STEP 5 FAILED:', error);
-        await takeScreenshot(page, '12-error-form-filling', 'Error filling form');
+        await takeScreenshot(page, '15-error-form-filling', 'Error filling form');
         throw error;
       }
       
