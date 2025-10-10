@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/firebase'
-import { collection, query, where, getDocs } from 'firebase/firestore'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
 import { Service } from '@/types/service'
 
 export async function GET(
@@ -17,16 +16,27 @@ export async function GET(
       )
     }
 
+    // Check if Admin SDK is initialized
+    if (!isAdminInitialized()) {
+      console.error('❌ Firebase Admin SDK not initialized')
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
     console.log('🔍 Loading intake form for token:', token)
 
-    // Query services collection for intake form with matching token
-    const servicesRef = collection(db, 'services')
+    // Use Admin SDK to query services collection
+    const adminDb = getAdminDb()
     console.log('📡 Querying services with intakeForm.token ==', token)
     
-    const q = query(servicesRef, where('intakeForm.token', '==', token))
-    console.log('📡 Executing query...')
+    const querySnapshot = await adminDb
+      .collection('services')
+      .where('intakeForm.token', '==', token)
+      .limit(1)
+      .get()
     
-    const querySnapshot = await getDocs(q)
     console.log('📡 Query completed. Results:', querySnapshot.size)
 
     if (querySnapshot.empty) {
@@ -38,7 +48,8 @@ export async function GET(
     }
 
     const serviceDoc = querySnapshot.docs[0]
-    const service = { id: serviceDoc.id, ...serviceDoc.data() } as Service
+    const serviceData = serviceDoc.data()
+    const service = { id: serviceDoc.id, ...serviceData } as any
 
     // Check if service has intake form
     if (!service.intakeForm) {
@@ -100,3 +111,4 @@ export async function GET(
     )
   }
 }
+

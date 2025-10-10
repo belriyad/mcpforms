@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/firebase'
-import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { createSubmissionNotificationEmail } from '@/lib/email-templates'
 
@@ -28,12 +28,24 @@ export async function POST(
       )
     }
 
+    // Check if Admin SDK is initialized
+    if (!isAdminInitialized()) {
+      console.error('❌ Firebase Admin SDK not initialized')
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
     console.log('🚀 Submitting intake form for token:', token)
 
-    // Find service by intake token
-    const servicesRef = collection(db, 'services')
-    const q = query(servicesRef, where('intakeForm.token', '==', token))
-    const querySnapshot = await getDocs(q)
+    // Use Admin SDK to find service by intake token
+    const adminDb = getAdminDb()
+    const querySnapshot = await adminDb
+      .collection('services')
+      .where('intakeForm.token', '==', token)
+      .limit(1)
+      .get()
 
     if (querySnapshot.empty) {
       console.log('❌ No service found with token:', token)
@@ -56,18 +68,17 @@ export async function POST(
       })
     }
 
-    // Update service with final client response
-    const serviceRef = doc(db, 'services', serviceDoc.id)
-    await updateDoc(serviceRef, {
+    // Update service with final client response using Admin SDK
+    await adminDb.collection('services').doc(serviceDoc.id).update({
       clientResponse: {
         responses: formData,
         customFields: customFields || [],
         customClauses: customClauses || [],
-        submittedAt: serverTimestamp(),
+        submittedAt: FieldValue.serverTimestamp(),
         status: 'submitted',
       },
       status: 'intake_submitted',
-      updatedAt: serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     })
 
     console.log('✅ Intake form submitted successfully for service:', serviceDoc.id)

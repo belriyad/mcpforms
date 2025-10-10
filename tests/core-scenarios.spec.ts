@@ -333,41 +333,52 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
       // Try multiple selectors to find template cards
       let templateSelected = false;
       
-      // Strategy 1: Look for the clickable template divs
-      const templateCards = page.locator('div').filter({ hasText: /fields.*Last updated/i });
+      // Strategy 1: Find the parent div with cursor-pointer that has the onClick handler
+      // This should match the template card container itself
+      const templateCards = page.locator('div[class*="cursor-pointer"]').filter({ hasText: /fields.*Last updated/i });
       const cardCount = await templateCards.count();
-      console.log(`📋 Strategy 1: Found ${cardCount} template cards`);
+      console.log(`📋 Strategy 1: Found ${cardCount} template cards with cursor-pointer`);
       
       if (cardCount > 0) {
+        // Wait a moment for React to be ready
+        await page.waitForTimeout(500);
         await templateCards.first().click();
-        console.log('✅ Selected template using Strategy 1');
+        console.log('✅ Clicked template card using Strategy 1');
+        // Wait for React state update
+        await page.waitForTimeout(1000);
         templateSelected = true;
       } else {
-        // Strategy 2: Click any div that contains template name (look for our known templates)
-        const knownTemplate = page.locator('text=/Warranty Deed|Trust|Certificate/i').first();
-        if (await knownTemplate.isVisible({ timeout: 3000 }).catch(() => false)) {
-          // Click the parent card
-          await knownTemplate.locator('..').locator('..').click();
-          console.log('✅ Selected template using Strategy 2');
+        // Strategy 2: Look for any div with border-2 rounded-lg (template card styling)
+        const styledCard = page.locator('div.border-2.rounded-lg.p-4.cursor-pointer').first();
+        if (await styledCard.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await styledCard.click();
+          console.log('✅ Clicked template card using Strategy 2');
+          await page.waitForTimeout(1000);
           templateSelected = true;
         } else {
-          // Strategy 3: Just click the first clickable div in the template area
-          const anyClickable = page.locator('[class*="cursor-pointer"]').first();
-          if (await anyClickable.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await anyClickable.click();
-            console.log('✅ Selected template using Strategy 3');
+          // Strategy 3: Click the checkbox within template
+          const checkbox = page.locator('div.w-5.h-5.rounded.border-2').first();
+          if (await checkbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await checkbox.click();
+            console.log('✅ Clicked checkbox using Strategy 3');
+            await page.waitForTimeout(1000);
             templateSelected = true;
           }
         }
       }
       
       if (templateSelected) {
-        await page.waitForTimeout(500);
-        // Verify selection
+        // Verify selection by checking for the selection message
         const selectionMessage = page.locator('text=/\\d+ template.*selected/i');
-        if (await selectionMessage.isVisible({ timeout: 2000 }).catch(() => false)) {
+        const isVisible = await selectionMessage.isVisible({ timeout: 3000 }).catch(() => false);
+        if (isVisible) {
           const text = await selectionMessage.textContent();
           console.log(`✅ Selection confirmed: ${text}`);
+        } else {
+          console.log('⚠️ Template clicked but selection message not visible');
+          // Try clicking again
+          await templateCards.first().click();
+          await page.waitForTimeout(1000);
         }
       } else {
         console.log('⚠️ Could not select any template');
@@ -400,11 +411,12 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
       console.log('⏳ Creating service and sending intake...');
       await page.waitForTimeout(3000); // Wait for service creation
       
-      // Wait for redirect to service detail page
-      await page.waitForURL(/\/admin\/services\/[^/]+$/, { timeout: 30000, waitUntil: 'domcontentloaded' });
+      // Wait for redirect to service detail page (allow optional trailing slash)
+      await page.waitForURL(/\/admin\/services\/[^/]+\/?$/, { timeout: 30000, waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2000);
       
-      serviceId = page.url().split('/services/')[1];
+      // Extract service ID from URL (remove trailing slash if present)
+      serviceId = page.url().split('/services/')[1].replace(/\/$/, '');
       
       await takeScreenshot(page, '10-service-created', 'Service created successfully');
       console.log('✅ STEP 2 COMPLETE: Service created successfully!');
@@ -457,9 +469,10 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
             }
             return '';
           },
-          // Strategy 3: Search in page text
+          // Strategy 3: Search in page text for token pattern
           async () => {
-            const tokenMatch = pageText?.match(/intake_\w+/);
+            // Token format: intake_<timestamp>_<random9chars>
+            const tokenMatch = pageText?.match(/intake_\d+_[a-z0-9]{9}/);
             return tokenMatch ? tokenMatch[0] : '';
           }
         ];
@@ -513,10 +526,11 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
               }
               return '';
             },
-            // Strategy 3: Search in page text
+            // Strategy 3: Search in page text for token pattern
             async () => {
               const pageText = await page.locator('body').textContent();
-              const tokenMatch = pageText?.match(/intake_\w+/);
+              // Token format: intake_<timestamp>_<random9chars>
+              const tokenMatch = pageText?.match(/intake_\d+_[a-z0-9]{9}/);
               return tokenMatch ? tokenMatch[0] : '';
             }
           ];
@@ -587,11 +601,11 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
       try {
         let filledCount = 0;
         
-        // Fill text inputs
-        const textInputs = page.locator('input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input:not([type="hidden"]):not([type="submit"]):not([type="button"])');
+        // Fill text inputs (excluding date and other special types)
+        const textInputs = page.locator('input[type="text"], input[type="email"], input[type="tel"], input[type="number"]');
         const inputCount = await textInputs.count();
         
-        console.log(`📝 Found ${inputCount} input fields to fill`);
+        console.log(`📝 Found ${inputCount} text input fields to fill`);
         
         for (let i = 0; i < inputCount; i++) {
           const input = textInputs.nth(i);
@@ -622,6 +636,27 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
             
             await input.fill(value);
             console.log(`   ✓ Filled "${label}": ${value}`);
+            filledCount++;
+          }
+        }
+        
+        // Fill date inputs
+        const dateInputs = page.locator('input[type="date"]');
+        const dateCount = await dateInputs.count();
+        
+        if (dateCount > 0) {
+          console.log(`📝 Found ${dateCount} date fields to fill`);
+        }
+        
+        for (let i = 0; i < dateCount; i++) {
+          const input = dateInputs.nth(i);
+          if (await input.isVisible({ timeout: 1000 }).catch(() => false)) {
+            const name = await input.getAttribute('name') || `date-${i}`;
+            const placeholder = await input.getAttribute('placeholder') || '';
+            const label = placeholder || name;
+            const value = '2024-01-15'; // Valid date format for date inputs
+            await input.fill(value);
+            console.log(`   ✓ Filled date "${label}": ${value}`);
             filledCount++;
           }
         }
