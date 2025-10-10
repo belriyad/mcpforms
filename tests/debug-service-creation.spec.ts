@@ -6,19 +6,21 @@ test('Debug service creation issue', async ({ page }) => {
   test.setTimeout(60000);
   
   try {
-    // Navigate to admin page
-    await page.goto('/admin');
+    // Navigate to login page
+    await page.goto('https://formgenai-4545.web.app/login');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(2000);
     
-    // Handle authentication if needed
-    const emailInput = page.locator('input[type="email"]');
+    // Login
+    const emailInput = page.getByPlaceholder(/you@example/i);
     if (await emailInput.isVisible()) {
-      console.log('🔐 Authenticating...');
-      await emailInput.fill('test@example.com');
-      await page.locator('input[type="password"]').fill('password123');
-      await page.locator('button[type="submit"]').click();
-      await page.waitForTimeout(3000);
+      console.log('🔐 Logging in...');
+      await emailInput.fill('belal.riyad@gmail.com');
+      await page.getByPlaceholder(/••••••••/i).fill('9920032');
+      await page.getByRole('button', { name: /sign in/i }).click();
+      await page.waitForURL(/\/admin/, { timeout: 15000 });
+      console.log('✅ Logged in successfully');
+      await page.waitForTimeout(2000);
     }
     
     // Navigate to Services tab

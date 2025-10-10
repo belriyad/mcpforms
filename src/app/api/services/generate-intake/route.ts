@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { FormField } from '@/types/service'
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isAdminInitialized()) {
+      return NextResponse.json(
+        { error: 'Server configuration error - Firebase Admin not initialized' },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json()
     const { serviceId } = body
 
@@ -15,13 +22,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get service data
-    const serviceDoc = await getDoc(doc(db, 'services', serviceId))
-    if (!serviceDoc.exists()) {
+    // Get service data using Admin SDK
+    const adminDb = getAdminDb()
+    const serviceDoc = await adminDb.collection('services').doc(serviceId).get()
+    if (!serviceDoc.exists) {
       return NextResponse.json({ error: 'Service not found' }, { status: 404 })
     }
 
-    const serviceData = serviceDoc.data()
+    const serviceData = serviceDoc.data()!
     const templates = serviceData.templates || []
 
     if (templates.length === 0) {
@@ -85,11 +93,11 @@ export async function POST(request: NextRequest) {
       link
     }
 
-    // Update service with intake form
-    await updateDoc(doc(db, 'services', serviceId), {
+    // Update service with intake form using Admin SDK
+    await adminDb.collection('services').doc(serviceId).update({
       intakeForm,
       status: 'draft', // Still draft, not sent yet
-      updatedAt: serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({

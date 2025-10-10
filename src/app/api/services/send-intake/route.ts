@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { createIntakeEmail } from '@/lib/email-templates'
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isAdminInitialized()) {
+      return NextResponse.json(
+        { error: 'Server configuration error - Firebase Admin not initialized' },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json()
     const { serviceId } = body
 
@@ -16,13 +23,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get service data
-    const serviceDoc = await getDoc(doc(db, 'services', serviceId))
-    if (!serviceDoc.exists()) {
+    // Get service data using Admin SDK
+    const adminDb = getAdminDb()
+    const serviceDoc = await adminDb.collection('services').doc(serviceId).get()
+    if (!serviceDoc.exists) {
       return NextResponse.json({ error: 'Service not found' }, { status: 404 })
     }
 
-    const serviceData = serviceDoc.data()
+    const serviceData = serviceDoc.data()!
 
     if (!serviceData.intakeForm) {
       return NextResponse.json(
@@ -64,12 +72,12 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ Email not configured - link generated but email not sent')
     }
 
-    // Update service status
-    await updateDoc(doc(db, 'services', serviceId), {
+    // Update service status using Admin SDK
+    await adminDb.collection('services').doc(serviceId).update({
       status: 'intake_sent',
-      intakeFormSentAt: serverTimestamp(),
+      intakeFormSentAt: FieldValue.serverTimestamp(),
       emailSent,
-      updatedAt: serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({
