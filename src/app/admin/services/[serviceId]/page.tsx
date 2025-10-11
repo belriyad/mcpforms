@@ -149,6 +149,8 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
     if (!service) return
     
     setGeneratingDocs(true)
+    let currentDocuments: any = null
+    
     try {
       const response = await fetch('/api/services/generate-documents', {
         method: 'POST',
@@ -163,16 +165,40 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       if (result.success) {
         alert(`✅ Successfully generated ${result.documents.length} documents!`)
         
+        // Give Firestore a moment to propagate the changes
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
         // Force a refresh of the service data to get updated downloadUrls
         const serviceRef = doc(db, 'services', service.id)
         const updatedServiceDoc = await getDoc(serviceRef)
         
         if (updatedServiceDoc.exists()) {
-          setService({ id: updatedServiceDoc.id, ...updatedServiceDoc.data() } as Service)
+          const freshService = { id: updatedServiceDoc.id, ...updatedServiceDoc.data() } as Service
+          currentDocuments = freshService.generatedDocuments
+          
+          console.log('🔄 Refreshed service data:', {
+            documentsCount: freshService.generatedDocuments?.length,
+            downloadUrls: freshService.generatedDocuments?.map((d: any) => ({ 
+              fileName: d.fileName, 
+              hasUrl: !!d.downloadUrl 
+            }))
+          })
+          setService(freshService)
         }
         
-        // Alternative: reload the entire page to ensure fresh data
-        // setTimeout(() => window.location.reload(), 1000)
+        // If onSnapshot doesn't pick up changes, force reload as backup
+        setTimeout(() => {
+          const checkRef = doc(db, 'services', service.id)
+          getDoc(checkRef).then(checkDoc => {
+            if (checkDoc.exists()) {
+              const checkService = { id: checkDoc.id, ...checkDoc.data() } as Service
+              if (JSON.stringify(checkService.generatedDocuments) !== JSON.stringify(currentDocuments)) {
+                console.log('📦 Backup refresh triggered - onSnapshot missed update')
+                setService(checkService)
+              }
+            }
+          })
+        }, 2000)
       } else {
         alert(`❌ Error: ${result.error}`)
       }
