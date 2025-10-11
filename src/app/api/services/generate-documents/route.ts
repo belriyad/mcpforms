@@ -223,16 +223,33 @@ export async function POST(request: NextRequest) {
         doc.fileSize = generatedBuffer.length
 
         console.log(`✅ Generated and uploaded: ${doc.fileName} (${doc.fileSize} bytes)`)
+        console.log(`   Download URL: ${doc.downloadUrl}`)
       } catch (error) {
         console.error(`❌ Error generating ${doc.templateName}:`, error)
+        console.error(`   Error details:`, error instanceof Error ? error.message : 'Unknown error')
+        console.error(`   Stack:`, error instanceof Error ? error.stack : 'No stack')
+        doc.status = 'error'
+        doc.downloadUrl = null
         // Continue with other documents even if one fails
       }
     }
 
+    // Count successful generations
+    const successfulDocs = generatedDocuments.filter(d => d.downloadUrl).length
+    const failedDocs = generatedDocuments.length - successfulDocs
+    
+    console.log(`\n📊 Generation Summary:`)
+    console.log(`   ✅ Successful: ${successfulDocs}/${generatedDocuments.length}`)
+    console.log(`   ❌ Failed: ${failedDocs}/${generatedDocuments.length}`)
+    
+    generatedDocuments.forEach((doc, i) => {
+      console.log(`   ${i + 1}. ${doc.fileName}: ${doc.downloadUrl ? '✅ HAS URL' : '❌ NO URL'}`)
+    })
+
     // Update service with generated documents (now with downloadUrls)
     await adminDb.collection('services').doc(serviceId).update({
       generatedDocuments,
-      status: 'documents_ready',
+      status: successfulDocs > 0 ? 'documents_ready' : 'generation_failed',
       documentsGeneratedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
@@ -240,12 +257,26 @@ export async function POST(request: NextRequest) {
     console.log('✅ Service updated with generated documents and download URLs')
 
     const successCount = generatedDocuments.filter(doc => doc.downloadUrl).length
+    const failedCount = generatedDocuments.length - successCount
 
     return NextResponse.json({
-      success: true,
-      message: `Successfully generated ${successCount}/${generatedDocuments.length} documents`,
+      success: successCount > 0,
+      message: `Successfully generated ${successCount}/${generatedDocuments.length} documents${failedCount > 0 ? ` (${failedCount} failed)` : ''}`,
       documents: generatedDocuments,
       serviceId,
+      summary: {
+        total: generatedDocuments.length,
+        successful: successCount,
+        failed: failedCount,
+        documentsWithUrls: generatedDocuments.filter(d => d.downloadUrl).map(d => ({
+          fileName: d.fileName,
+          downloadUrl: d.downloadUrl
+        })),
+        documentsWithoutUrls: generatedDocuments.filter(d => !d.downloadUrl).map(d => ({
+          fileName: d.fileName,
+          status: d.status
+        }))
+      }
     })
   } catch (error) {
     console.error('❌ Error generating documents:', error)

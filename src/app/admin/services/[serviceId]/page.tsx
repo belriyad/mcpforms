@@ -164,7 +164,32 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
 
       if (result.success) {
         console.log('✅ API returned success:', result)
+        
+        // Show detailed summary
+        if (result.summary) {
+          console.log('📊 Generation Summary:', {
+            total: result.summary.total,
+            successful: result.summary.successful,
+            failed: result.summary.failed
+          })
+          
+          if (result.summary.documentsWithUrls?.length) {
+            console.log('✅ Documents with URLs:', result.summary.documentsWithUrls)
+          }
+          
+          if (result.summary.documentsWithoutUrls?.length) {
+            console.error('❌ Documents WITHOUT URLs:', result.summary.documentsWithoutUrls)
+          }
+        }
+        
         alert(`✅ Successfully generated ${result.documents.length} documents!`)
+        
+        // If some documents failed, show warning
+        if (result.summary?.failed > 0) {
+          setTimeout(() => {
+            alert(`⚠️ Warning: ${result.summary.failed} document(s) failed to generate. Check console for details.`)
+          }, 500)
+        }
         
         // Wait longer for document generation and Firestore propagation
         console.log('⏳ Waiting 3 seconds for document generation to complete...')
