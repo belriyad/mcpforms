@@ -162,9 +162,11 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
 
       const result = await response.json()
 
-      if (result.success) {
-        console.log('✅ API returned success:', result)
-        
+      // Log result regardless of success/failure
+      console.log(`📊 API Response:`, result)
+      
+      // Handle both success and partial failure cases
+      if (result.success || (result.summary && result.summary.total > 0)) {
         // Show detailed summary
         if (result.summary) {
           console.log('📊 Generation Summary:', {
@@ -182,13 +184,16 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
           }
         }
         
-        alert(`✅ Successfully generated ${result.documents.length} documents!`)
+        // Show appropriate message based on results
+        const successful = result.summary?.successful || 0
+        const failed = result.summary?.failed || 0
         
-        // If some documents failed, show warning
-        if (result.summary?.failed > 0) {
-          setTimeout(() => {
-            alert(`⚠️ Warning: ${result.summary.failed} document(s) failed to generate. Check console for details.`)
-          }, 500)
+        if (successful > 0 && failed === 0) {
+          alert(`✅ Successfully generated ${successful} document(s)!`)
+        } else if (successful > 0 && failed > 0) {
+          alert(`⚠️ Generated ${successful} document(s), but ${failed} failed. Check console for details.`)
+        } else if (failed > 0) {
+          alert(`❌ All ${failed} document(s) failed to generate. Check console and Firebase logs for details.`)
         }
         
         // Wait longer for document generation and Firestore propagation
