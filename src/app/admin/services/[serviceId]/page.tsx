@@ -163,13 +163,16 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       const result = await response.json()
 
       if (result.success) {
+        console.log('✅ API returned success:', result)
         alert(`✅ Successfully generated ${result.documents.length} documents!`)
         
-        // Give Firestore a moment to propagate the changes
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Wait longer for document generation and Firestore propagation
+        console.log('⏳ Waiting 3 seconds for document generation to complete...')
+        await new Promise(resolve => setTimeout(resolve, 3000))
         
         // Force a refresh of the service data to get updated downloadUrls
         const serviceRef = doc(db, 'services', service.id)
+        console.log('🔄 Fetching fresh service data from Firestore...')
         const updatedServiceDoc = await getDoc(serviceRef)
         
         if (updatedServiceDoc.exists()) {
@@ -178,27 +181,58 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
           
           console.log('🔄 Refreshed service data:', {
             documentsCount: freshService.generatedDocuments?.length,
-            downloadUrls: freshService.generatedDocuments?.map((d: any) => ({ 
+            documents: freshService.generatedDocuments?.map((d: any) => ({ 
               fileName: d.fileName, 
-              hasUrl: !!d.downloadUrl 
+              hasUrl: !!d.downloadUrl,
+              downloadUrl: d.downloadUrl
             }))
           })
           setService(freshService)
+          
+          // Check if all documents have downloadUrls
+          const docsWithUrls = freshService.generatedDocuments?.filter((d: any) => d.downloadUrl).length || 0
+          const totalDocs = freshService.generatedDocuments?.length || 0
+          console.log(`📊 Status: ${docsWithUrls}/${totalDocs} documents have download URLs`)
         }
         
-        // If onSnapshot doesn't pick up changes, force reload as backup
+        // Add more aggressive backup refreshes at intervals
         setTimeout(() => {
+          console.log('🔄 Backup refresh #1 (after 5s)...')
           const checkRef = doc(db, 'services', service.id)
           getDoc(checkRef).then(checkDoc => {
             if (checkDoc.exists()) {
               const checkService = { id: checkDoc.id, ...checkDoc.data() } as Service
+              const docsWithUrls = checkService.generatedDocuments?.filter((d: any) => d.downloadUrl).length || 0
+              const totalDocs = checkService.generatedDocuments?.length || 0
+              console.log(`📊 Backup #1: ${docsWithUrls}/${totalDocs} documents ready`)
+              
               if (JSON.stringify(checkService.generatedDocuments) !== JSON.stringify(currentDocuments)) {
-                console.log('📦 Backup refresh triggered - onSnapshot missed update')
+                console.log('📦 Backup refresh #1 triggered - data changed')
+                setService(checkService)
+                currentDocuments = checkService.generatedDocuments
+              }
+            }
+          })
+        }, 5000)
+        
+        // Second backup check
+        setTimeout(() => {
+          console.log('🔄 Backup refresh #2 (after 10s)...')
+          const checkRef = doc(db, 'services', service.id)
+          getDoc(checkRef).then(checkDoc => {
+            if (checkDoc.exists()) {
+              const checkService = { id: checkDoc.id, ...checkDoc.data() } as Service
+              const docsWithUrls = checkService.generatedDocuments?.filter((d: any) => d.downloadUrl).length || 0
+              const totalDocs = checkService.generatedDocuments?.length || 0
+              console.log(`📊 Backup #2: ${docsWithUrls}/${totalDocs} documents ready`)
+              
+              if (JSON.stringify(checkService.generatedDocuments) !== JSON.stringify(currentDocuments)) {
+                console.log('📦 Backup refresh #2 triggered - data changed')
                 setService(checkService)
               }
             }
           })
-        }, 2000)
+        }, 10000)
       } else {
         alert(`❌ Error: ${result.error}`)
       }
