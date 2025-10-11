@@ -128,62 +128,115 @@ export async function POST(request: NextRequest) {
         
         // Find the template
         const template = service.templates.find((t: any) => t.templateId === doc.templateId)
-        if (!template || !template.storagePath) {
-          console.warn(`⚠️ Template storage path not found for ${doc.templateName}`)
+        if (!template) {
+          console.warn(`⚠️ Template not found for ${doc.templateName}`)
+          doc.status = 'error'
+          doc.downloadUrl = null
           continue
         }
 
-        // Download template from Cloud Storage
-        const templateFile = bucket.file(template.storagePath)
-        const [templateExists] = await templateFile.exists()
-        
-        if (!templateExists) {
-          console.warn(`⚠️ Template file not found in storage: ${template.storagePath}`)
-          continue
-        }
-
-        const [templateBuffer] = await templateFile.download()
-
-        // Load template with docxtemplater
-        const zip = new PizZip(templateBuffer)
-        const docx = new Docxtemplater(zip, {
-          paragraphLoop: true,
-          linebreaks: true,
+        console.log(`📂 Template found:`, {
+          name: template.name,
+          hasStoragePath: !!template.storagePath,
+          storagePath: template.storagePath,
+          hasFileName: !!template.fileName
         })
 
-        // Prepare data for template
-        const templateData: Record<string, any> = {}
-        
-        // Add all populated fields
-        for (const [fieldName, fieldData] of Object.entries(doc.populatedFields)) {
-          templateData[fieldName] = (fieldData as any).value
-        }
+        let generatedBuffer: Buffer
 
-        // Add AI sections if any
-        if (template.aiSections && template.aiSections.length > 0) {
-          for (const aiSection of template.aiSections) {
-            if (aiSection.generatedContent) {
-              templateData[aiSection.placeholder] = aiSection.generatedContent
+        if (!template.storagePath) {
+          console.warn(`⚠️ Template storage path not found, creating simple document for ${doc.templateName}`)
+          
+          // Create a simple DOCX document without template
+          // This is a minimal DOCX structure
+          const simpleDocxContent = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>${doc.templateName}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Service: ${service.name}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Client: ${service.clientName}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Email: ${service.clientEmail}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Generated: ${new Date().toLocaleDateString()}</w:t></w:r></w:p>
+    <w:p><w:r><w:t></w:t></w:r></w:p>
+    <w:p><w:r><w:t>Form Data:</w:t></w:r></w:p>
+    ${Object.entries(doc.populatedFields).map(([key, fieldData]: [string, any]) => 
+      `<w:p><w:r><w:t>${fieldData.label || key}: ${fieldData.value}</w:t></w:r></w:p>`
+    ).join('')}
+  </w:body>
+</w:document>`
+
+          const zip = new PizZip()
+          zip.file('word/document.xml', simpleDocxContent)
+          zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`)
+          zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`)
+
+          generatedBuffer = zip.generate({
+            type: 'nodebuffer',
+            compression: 'DEFLATE',
+          })
+        } else {
+          // Download template from Cloud Storage
+          const templateFile = bucket.file(template.storagePath)
+          const [templateExists] = await templateFile.exists()
+          
+          if (!templateExists) {
+            console.warn(`⚠️ Template file not found in storage: ${template.storagePath}`)
+            doc.status = 'error'
+            doc.downloadUrl = null
+            continue
+          }
+
+          const [templateBuffer] = await templateFile.download()
+
+          // Load template with docxtemplater
+          const zip = new PizZip(templateBuffer)
+          const docx = new Docxtemplater(zip, {
+            paragraphLoop: true,
+            linebreaks: true,
+          })
+
+          // Prepare data for template
+          const templateData: Record<string, any> = {}
+          
+          // Add all populated fields
+          for (const [fieldName, fieldData] of Object.entries(doc.populatedFields)) {
+            templateData[fieldName] = (fieldData as any).value
+          }
+
+          // Add AI sections if any
+          if (template.aiSections && template.aiSections.length > 0) {
+            for (const aiSection of template.aiSections) {
+              if (aiSection.generatedContent) {
+                templateData[aiSection.placeholder] = aiSection.generatedContent
+              }
             }
           }
+
+          // Add metadata
+          templateData.serviceName = service.name
+          templateData.clientName = service.clientName
+          templateData.clientEmail = service.clientEmail
+          templateData.generatedDate = new Date().toLocaleDateString()
+
+          console.log('📋 Template data keys:', Object.keys(templateData))
+
+          // Render the document
+          docx.render(templateData)
+
+          // Generate buffer
+          generatedBuffer = docx.getZip().generate({
+            type: 'nodebuffer',
+            compression: 'DEFLATE',
+          })
         }
-
-        // Add metadata
-        templateData.serviceName = service.name
-        templateData.clientName = service.clientName
-        templateData.clientEmail = service.clientEmail
-        templateData.generatedDate = new Date().toLocaleDateString()
-
-        console.log('📋 Template data keys:', Object.keys(templateData))
-
-        // Render the document
-        docx.render(templateData)
-
-        // Generate buffer
-        const generatedBuffer = docx.getZip().generate({
-          type: 'nodebuffer',
-          compression: 'DEFLATE',
-        })
 
         // Upload to Cloud Storage
         const storagePath = `services/${serviceId}/documents/${doc.id}/${doc.fileName}`
