@@ -526,7 +526,17 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                     <CheckCircle2 className="w-5 h-5" />
                     <span className="font-medium">
                       Documents generated on {service.documentsGeneratedAt 
-                        ? new Date(service.documentsGeneratedAt as any).toLocaleString() 
+                        ? (() => {
+                            // Handle Firestore Timestamp
+                            const timestamp = service.documentsGeneratedAt as any;
+                            if (timestamp?.toDate) {
+                              return timestamp.toDate().toLocaleString();
+                            } else if (timestamp?.seconds) {
+                              return new Date(timestamp.seconds * 1000).toLocaleString();
+                            } else {
+                              return new Date(timestamp).toLocaleString();
+                            }
+                          })()
                         : 'Recently'}
                     </span>
                   </div>
@@ -549,22 +559,94 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                         </div>
                       </div>
                       <button 
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                        onClick={() => alert('Document download will be available soon!')}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={async () => {
+                          try {
+                            // Check if document has downloadUrl (actual file generated)
+                            if (!doc.downloadUrl) {
+                              alert('Document file is still being generated. Please try again in a moment.');
+                              return;
+                            }
+                            
+                            // Download the document
+                            const response = await fetch(`/api/services/${service.id}/documents/${doc.id}/download`);
+                            
+                            if (!response.ok) {
+                              const error = await response.json();
+                              alert(`Download failed: ${error.error || 'Unknown error'}`);
+                              return;
+                            }
+                            
+                            // Create blob and trigger download
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = doc.fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                          } catch (error) {
+                            console.error('Download error:', error);
+                            alert('Failed to download document. Please try again.');
+                          }
+                        }}
+                        disabled={!doc.downloadUrl}
                       >
                         <Download className="w-4 h-4 inline mr-2" />
-                        Download
+                        {doc.downloadUrl ? 'Download' : 'Generating...'}
                       </button>
                     </div>
                   ))}
                 </div>
 
                 <button 
-                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium"
-                  onClick={() => alert('ZIP download will be available soon!')}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={async () => {
+                    try {
+                      // Check if any documents have downloadUrl
+                      const downloadableDocuments = service.generatedDocuments?.filter((doc: any) => doc.downloadUrl) || [];
+                      
+                      if (downloadableDocuments.length === 0) {
+                        alert('No documents are ready for download yet. Please wait for documents to be generated.');
+                        return;
+                      }
+                      
+                      // Download each document sequentially
+                      for (const doc of downloadableDocuments) {
+                        try {
+                          const response = await fetch(`/api/services/${service.id}/documents/${doc.id}/download`);
+                          
+                          if (!response.ok) continue;
+                          
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = doc.fileName;
+                          document.body.appendChild(a);
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                          
+                          // Small delay between downloads
+                          await new Promise(resolve => setTimeout(resolve, 500));
+                        } catch (error) {
+                          console.error(`Failed to download ${doc.fileName}:`, error);
+                        }
+                      }
+                      
+                      alert(`Downloaded ${downloadableDocuments.length} document(s)`);
+                    } catch (error) {
+                      console.error('Download all error:', error);
+                      alert('Failed to download documents. Please try again.');
+                    }
+                  }}
+                  disabled={!service.generatedDocuments?.some((doc: any) => doc.downloadUrl)}
                 >
                   <Package className="w-5 h-5 inline mr-2" />
-                  Download All as ZIP
+                  Download All Documents
                 </button>
               </div>
             )}

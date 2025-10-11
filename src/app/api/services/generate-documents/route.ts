@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { getAdminDb, getAdminStorage, isAdminInitialized } from '@/lib/firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { Service } from '@/types/service'
+import Docxtemplater from 'docxtemplater'
+import PizZip from 'pizzip'
 
 export async function POST(request: NextRequest) {
   try {
@@ -89,11 +91,12 @@ export async function POST(request: NextRequest) {
         // AI sections that were included
         aiSections: template.aiSections || [],
         
-        // Download URL (will be set after actual document generation)
-        downloadUrl: null,
+        // Download URL and storage info (will be set after actual document generation)
+        downloadUrl: null as string | null,
+        storagePath: null as string | null,
         
         // Size and format info
-        fileSize: null,
+        fileSize: null as number | null,
         format: 'docx',
       }
 
@@ -115,7 +118,106 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Generated metadata for ${generatedDocuments.length} documents`)
 
-    // Update service with generated documents using Admin SDK
+    // Now generate actual DOCX files
+    const adminStorage = getAdminStorage()
+    const bucket = adminStorage.bucket()
+
+    for (const doc of generatedDocuments) {
+      try {
+        console.log(`📝 Generating DOCX file for: ${doc.templateName}`)
+        
+        // Find the template
+        const template = service.templates.find((t: any) => t.templateId === doc.templateId)
+        if (!template || !template.storagePath) {
+          console.warn(`⚠️ Template storage path not found for ${doc.templateName}`)
+          continue
+        }
+
+        // Download template from Cloud Storage
+        const templateFile = bucket.file(template.storagePath)
+        const [templateExists] = await templateFile.exists()
+        
+        if (!templateExists) {
+          console.warn(`⚠️ Template file not found in storage: ${template.storagePath}`)
+          continue
+        }
+
+        const [templateBuffer] = await templateFile.download()
+
+        // Load template with docxtemplater
+        const zip = new PizZip(templateBuffer)
+        const docx = new Docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+        })
+
+        // Prepare data for template
+        const templateData: Record<string, any> = {}
+        
+        // Add all populated fields
+        for (const [fieldName, fieldData] of Object.entries(doc.populatedFields)) {
+          templateData[fieldName] = (fieldData as any).value
+        }
+
+        // Add AI sections if any
+        if (template.aiSections && template.aiSections.length > 0) {
+          for (const aiSection of template.aiSections) {
+            if (aiSection.generatedContent) {
+              templateData[aiSection.placeholder] = aiSection.generatedContent
+            }
+          }
+        }
+
+        // Add metadata
+        templateData.serviceName = service.name
+        templateData.clientName = service.clientName
+        templateData.clientEmail = service.clientEmail
+        templateData.generatedDate = new Date().toLocaleDateString()
+
+        console.log('📋 Template data keys:', Object.keys(templateData))
+
+        // Render the document
+        docx.render(templateData)
+
+        // Generate buffer
+        const generatedBuffer = docx.getZip().generate({
+          type: 'nodebuffer',
+          compression: 'DEFLATE',
+        })
+
+        // Upload to Cloud Storage
+        const storagePath = `services/${serviceId}/documents/${doc.id}/${doc.fileName}`
+        const file = bucket.file(storagePath)
+        
+        await file.save(generatedBuffer, {
+          metadata: {
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            metadata: {
+              serviceId,
+              documentId: doc.id,
+              templateId: doc.templateId,
+              generatedAt: new Date().toISOString(),
+            },
+          },
+        })
+
+        // Make file publicly readable (or use signed URL for private access)
+        await file.makePublic()
+        const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
+
+        // Update document metadata
+        doc.downloadUrl = downloadUrl
+        doc.storagePath = storagePath
+        doc.fileSize = generatedBuffer.length
+
+        console.log(`✅ Generated and uploaded: ${doc.fileName} (${doc.fileSize} bytes)`)
+      } catch (error) {
+        console.error(`❌ Error generating ${doc.templateName}:`, error)
+        // Continue with other documents even if one fails
+      }
+    }
+
+    // Update service with generated documents (now with downloadUrls)
     await adminDb.collection('services').doc(serviceId).update({
       generatedDocuments,
       status: 'documents_ready',
@@ -123,20 +225,13 @@ export async function POST(request: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     })
 
-    console.log('✅ Service updated with generated documents')
+    console.log('✅ Service updated with generated documents and download URLs')
 
-    // TODO: Actual document generation
-    // For now, we're creating metadata only
-    // Next steps:
-    // 1. Load DOCX template from Cloud Storage
-    // 2. Use docxtemplater or similar to populate fields
-    // 3. Include AI-generated sections
-    // 4. Save to Cloud Storage
-    // 5. Update downloadUrl in generatedDocuments
+    const successCount = generatedDocuments.filter(doc => doc.downloadUrl).length
 
     return NextResponse.json({
       success: true,
-      message: `Successfully generated ${generatedDocuments.length} documents`,
+      message: `Successfully generated ${successCount}/${generatedDocuments.length} documents`,
       documents: generatedDocuments,
       serviceId,
     })
