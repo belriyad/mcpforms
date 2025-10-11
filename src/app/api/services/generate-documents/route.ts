@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/firebase'
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { Service } from '@/types/service'
 
 export async function POST(request: NextRequest) {
@@ -15,13 +15,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if Admin SDK is initialized
+    if (!isAdminInitialized()) {
+      console.error('❌ Firebase Admin SDK not initialized')
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
     console.log('📄 Generating documents for service:', serviceId)
 
-    // Load service from Firestore
-    const serviceRef = doc(db, 'services', serviceId)
-    const serviceSnap = await getDoc(serviceRef)
+    // Load service from Firestore using Admin SDK
+    const adminDb = getAdminDb()
+    const serviceDoc = await adminDb.collection('services').doc(serviceId).get()
 
-    if (!serviceSnap.exists()) {
+    if (!serviceDoc.exists) {
       console.log('❌ Service not found:', serviceId)
       return NextResponse.json(
         { success: false, error: 'Service not found' },
@@ -29,7 +38,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const service = { id: serviceSnap.id, ...serviceSnap.data() } as Service
+    const serviceData = serviceDoc.data()
+    const service = { id: serviceDoc.id, ...serviceData } as any
 
     // Verify intake form has been submitted
     if (!service.clientResponse || service.clientResponse.status !== 'submitted') {
@@ -105,12 +115,12 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Generated metadata for ${generatedDocuments.length} documents`)
 
-    // Update service with generated documents
-    await updateDoc(serviceRef, {
+    // Update service with generated documents using Admin SDK
+    await adminDb.collection('services').doc(serviceId).update({
       generatedDocuments,
       status: 'documents_ready',
-      documentsGeneratedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      documentsGeneratedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     })
 
     console.log('✅ Service updated with generated documents')

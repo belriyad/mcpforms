@@ -815,10 +815,43 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
       console.log('-'.repeat(60));
       
       try {
-        await page.waitForTimeout(2000);
-        const generateDocButton = page.getByRole('button', { name: /generate document|create document/i }).first();
+        // Reload page to ensure we have latest service state
+        console.log('🔄 Reloading service page to check for document generation button...');
+        await page.reload();
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(3000);
         
-        if (await generateDocButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+        // Try multiple strategies to find the generate document button
+        let generateButtonFound = false;
+        
+        // Strategy 1: Look for button with exact text
+        let generateDocButton = page.getByRole('button', { name: /generate all documents/i });
+        if (await generateDocButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+          generateButtonFound = true;
+          console.log('✅ Found button: Strategy 1 (exact text)');
+        }
+        
+        // Strategy 2: Look for button containing generate + document
+        if (!generateButtonFound) {
+          generateDocButton = page.locator('button').filter({ hasText: /generate.*document/i }).first();
+          if (await generateDocButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+            generateButtonFound = true;
+            console.log('✅ Found button: Strategy 2 (generate + document)');
+          }
+        }
+        
+        // Strategy 3: Look for button in the Document Generation section
+        if (!generateButtonFound) {
+          const docGenSection = page.locator('text=Document Generation').locator('..');
+          generateDocButton = docGenSection.locator('button').filter({ hasText: /generate/i }).first();
+          if (await generateDocButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+            generateButtonFound = true;
+            console.log('✅ Found button: Strategy 3 (in section)');
+          }
+        }
+        
+        if (generateButtonFound) {
+          console.log('📄 Clicking Generate Document button...');
           await safeClick(page, generateDocButton, 'Generate Document button');
           console.log('⏳ Document generation initiated...');
           await page.waitForTimeout(5000);
@@ -829,9 +862,24 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
           console.log('⏳ Waiting for document to be ready (up to 15 seconds)...');
           await page.waitForTimeout(10000);
           
-          const downloadLink = page.getByText(/download|ready|complete/i);
-          if (await downloadLink.isVisible({ timeout: 15000 }).catch(() => false)) {
-            console.log('✅ Document ready for download!');
+          // Check for success message or generated documents
+          const successIndicators = [
+            page.locator('text=/successfully generated/i'),
+            page.locator('text=/documents ready/i'),
+            page.locator('text=/generated.*documents/i'),
+            page.getByRole('button', { name: /download/i })
+          ];
+          
+          let documentReady = false;
+          for (const indicator of successIndicators) {
+            if (await indicator.isVisible({ timeout: 3000 }).catch(() => false)) {
+              documentReady = true;
+              console.log('✅ Document generation confirmed!');
+              break;
+            }
+          }
+          
+          if (documentReady) {
             timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
             await takeScreenshot(page, `${timestamp}-13-doc-ready`, 'Document ready');
             console.log('✅ STEP 9 COMPLETE: Document generated successfully!');
@@ -842,7 +890,15 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
             console.log('⚠️  STEP 9 PARTIAL: Document generation started but not confirmed ready');
           }
         } else {
-          console.log('⚠️  Generate Document button not found (templates may not be uploaded)');
+          console.log('⚠️  Generate Document button not found');
+          console.log('📊 Checking service status...');
+          
+          // Check what status message is shown
+          const pageText = await page.locator('body').textContent();
+          console.log('   Status contains "intake_submitted":', pageText?.includes('intake_submitted') || false);
+          console.log('   Status contains "Submitted":', pageText?.includes('Submitted') || false);
+          console.log('   Has "Document Generation" section:', pageText?.includes('Document Generation') || false);
+          
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
           await takeScreenshot(page, `${timestamp}-13-no-generate-button`, 'No generate button');
           console.log('⚠️  STEP 9 SKIPPED: No generate button available');
