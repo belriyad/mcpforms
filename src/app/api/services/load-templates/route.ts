@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
           templateId: templateDoc.id,
           name: templateData.name || 'Untitled Template',
           fileName: templateData.originalFileName || 'unknown.docx',
+          // CRITICAL: Copy storage path from template for document generation
+          storagePath: templateData.fileUrl || templateData.storagePath || null,
           aiSections: [],
           extractedFields: (templateData.extractedFields || []).map((field: any) => ({
             ...field,
