@@ -162,7 +162,17 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
 
       if (result.success) {
         alert(`✅ Successfully generated ${result.documents.length} documents!`)
-        // Service will update automatically via onSnapshot
+        
+        // Force a refresh of the service data to get updated downloadUrls
+        const serviceRef = doc(db, 'services', service.id)
+        const updatedServiceDoc = await getDoc(serviceRef)
+        
+        if (updatedServiceDoc.exists()) {
+          setService({ id: updatedServiceDoc.id, ...updatedServiceDoc.data() } as Service)
+        }
+        
+        // Alternative: reload the entire page to ensure fresh data
+        // setTimeout(() => window.location.reload(), 1000)
       } else {
         alert(`❌ Error: ${result.error}`)
       }
