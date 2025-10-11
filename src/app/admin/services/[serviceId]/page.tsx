@@ -26,7 +26,8 @@ import {
   FileCheck,
   Package,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react'
 
 export default function ServiceDetailPage({ params }: { params: { serviceId: string } }) {
@@ -601,53 +602,74 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                   ))}
                 </div>
 
-                <button 
-                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={async () => {
-                    try {
-                      // Check if any documents have downloadUrl
-                      const downloadableDocuments = service.generatedDocuments?.filter((doc: any) => doc.downloadUrl) || [];
-                      
-                      if (downloadableDocuments.length === 0) {
-                        alert('No documents are ready for download yet. Please wait for documents to be generated.');
-                        return;
-                      }
-                      
-                      // Download each document sequentially
-                      for (const doc of downloadableDocuments) {
-                        try {
-                          const response = await fetch(`/api/services/${service.id}/documents/${doc.id}/download`);
-                          
-                          if (!response.ok) continue;
-                          
-                          const blob = await response.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = doc.fileName;
-                          document.body.appendChild(a);
-                          a.click();
-                          window.URL.revokeObjectURL(url);
-                          document.body.removeChild(a);
-                          
-                          // Small delay between downloads
-                          await new Promise(resolve => setTimeout(resolve, 500));
-                        } catch (error) {
-                          console.error(`Failed to download ${doc.fileName}:`, error);
+                <div className="flex gap-3">
+                  <button 
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={async () => {
+                      try {
+                        // Check if any documents have downloadUrl
+                        const downloadableDocuments = service.generatedDocuments?.filter((doc: any) => doc.downloadUrl) || [];
+                        
+                        if (downloadableDocuments.length === 0) {
+                          alert('No documents are ready for download yet. Please wait for documents to be generated.');
+                          return;
                         }
+                        
+                        // Download each document sequentially
+                        for (const doc of downloadableDocuments) {
+                          try {
+                            const response = await fetch(`/api/services/${service.id}/documents/${doc.id}/download`);
+                            
+                            if (!response.ok) continue;
+                            
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = doc.fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                            
+                            // Small delay between downloads
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                          } catch (error) {
+                            console.error(`Failed to download ${doc.fileName}:`, error);
+                          }
+                        }
+                        
+                        alert(`Downloaded ${downloadableDocuments.length} document(s)`);
+                      } catch (error) {
+                        console.error('Download all error:', error);
+                        alert('Failed to download documents. Please try again.');
                       }
-                      
-                      alert(`Downloaded ${downloadableDocuments.length} document(s)`);
-                    } catch (error) {
-                      console.error('Download all error:', error);
-                      alert('Failed to download documents. Please try again.');
-                    }
-                  }}
-                  disabled={!service.generatedDocuments?.some((doc: any) => doc.downloadUrl)}
-                >
-                  <Package className="w-5 h-5 inline mr-2" />
-                  Download All Documents
-                </button>
+                    }}
+                    disabled={!service.generatedDocuments?.some((doc: any) => doc.downloadUrl)}
+                  >
+                    <Package className="w-5 h-5 inline mr-2" />
+                    Download All Documents
+                  </button>
+
+                  <button 
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    onClick={handleGenerateDocuments}
+                    disabled={generatingDocs}
+                    title="Regenerate all documents with latest data and template files"
+                  >
+                    {generatingDocs ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-5 h-5" />
+                        Regenerate Documents
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
           </div>
