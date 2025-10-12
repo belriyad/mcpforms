@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { FieldValue } from 'firebase-admin/firestore'
+import { getAdminDb } from '@/lib/firebase-admin'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({
@@ -27,13 +27,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Initialize Firebase Admin and get database
+    let adminDb
+    try {
+      adminDb = getAdminDb()
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Firebase Admin not initialized', details: 'Missing or insufficient permissions.' },
+        { status: 500 }
+      )
+    }
+
     // Get service and template details for context
-    const serviceDoc = await getDoc(doc(db, 'services', serviceId))
-    if (!serviceDoc.exists()) {
+    const serviceDoc = await adminDb.collection('services').doc(serviceId).get()
+    if (!serviceDoc.exists) {
       return NextResponse.json({ error: 'Service not found' }, { status: 404 })
     }
 
     const serviceData = serviceDoc.data()
+    if (!serviceData) {
+      return NextResponse.json({ error: 'Service data not found' }, { status: 404 })
+    }
+    
     const template = serviceData.templates?.find((t: any) => t.templateId === templateId)
     
     if (!template) {
@@ -99,9 +114,9 @@ Do not include explanations or comments, just the clause text itself.`
       return t
     })
 
-    await updateDoc(doc(db, 'services', serviceId), {
+    await adminDb.collection('services').doc(serviceId).update({
       templates: updatedTemplates,
-      updatedAt: serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp()
     })
 
     return NextResponse.json({
