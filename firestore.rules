@@ -30,6 +30,12 @@ service cloud.firestore {
       allow delete: if false; // Use Firebase Admin SDK for user deletion
     }
     
+    // User settings - users can read/write their own settings
+    match /userSettings/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+    
     // Templates - users can ONLY access their own templates
     // MIGRATION MODE: Allow access to templates without createdBy field
     match /templates/{templateId} {

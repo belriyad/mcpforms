@@ -27,7 +27,8 @@ import {
   Package,
   Loader2,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react'
 
 export default function ServiceDetailPage({ params }: { params: { serviceId: string } }) {
@@ -40,6 +41,10 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [generatingDocs, setGeneratingDocs] = useState(false)
   const [showViewResponses, setShowViewResponses] = useState(false)
   const [showEditResponses, setShowEditResponses] = useState(false)
+  const [showAIModal, setShowAIModal] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [generatingAI, setGeneratingAI] = useState(false)
 
   // Load service from Firestore with real-time updates
   useEffect(() => {
@@ -143,6 +148,42 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const handleResendIntake = () => {
     if (!service) return
     alert('Intake form link resent to ' + service.clientEmail)
+  }
+
+  const handleGenerateAISection = async () => {
+    if (!service || !selectedTemplateId || !aiPrompt.trim()) return
+    
+    setGeneratingAI(true)
+    try {
+      const response = await fetch('/api/services/generate-ai-section', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          serviceId: service.id,
+          templateId: selectedTemplateId,
+          prompt: aiPrompt
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        alert('✅ AI section generated successfully!')
+        setShowAIModal(false)
+        setAiPrompt('')
+        setSelectedTemplateId(null)
+        // Service will update automatically via onSnapshot
+      } else {
+        alert(`❌ Failed to generate AI section: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error generating AI section:', error)
+      alert('❌ Failed to generate AI section. Please try again.')
+    } finally {
+      setGeneratingAI(false)
+    }
   }
 
   const handleGenerateDocuments = async () => {
@@ -406,7 +447,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                 key={template.id}
                 className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-all"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <FileText className="w-5 h-5 text-blue-600" />
                     <div>
@@ -415,22 +456,49 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     {template.aiSections && template.aiSections.length > 0 && (
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
                         <Sparkles className="w-3 h-3" />
                         {template.aiSections.length} AI section{template.aiSections.length !== 1 ? 's' : ''}
                       </span>
                     )}
-                    <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                      <Eye className="w-4 h-4 inline mr-1" />
-                      View
-                    </button>
-                    <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                      <Edit className="w-4 h-4 inline mr-1" />
-                      Edit
-                    </button>
                   </div>
+                </div>
+                
+                {/* AI Sections List */}
+                {template.aiSections && template.aiSections.length > 0 && (
+                  <div className="mb-3 pl-8 space-y-1">
+                    {template.aiSections.map((section: any, idx: number) => (
+                      <div key={idx} className="text-sm text-gray-600 flex items-start gap-2">
+                        <Sparkles className="w-3 h-3 text-purple-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <span className="font-medium">{section.placeholder}</span>
+                          {section.prompt && (
+                            <span className="text-gray-500"> - {section.prompt.substring(0, 50)}{section.prompt.length > 50 ? '...' : ''}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      setSelectedTemplateId(template.templateId || template.id)
+                      setShowAIModal(true)
+                    }}
+                    className="px-3 py-1.5 text-sm bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-colors flex items-center gap-1"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Add AI Section
+                  </button>
+                  <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    <Eye className="w-4 h-4 inline mr-1" />
+                    View
+                  </button>
                 </div>
               </div>
             )) : (
@@ -798,6 +866,115 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               console.log('Responses saved successfully')
             }}
           />
+          
+          {/* AI Section Modal */}
+          {showAIModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                      <Sparkles className="w-6 h-6 text-purple-600" />
+                      Add AI-Generated Section
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowAIModal(false)
+                        setAiPrompt('')
+                      }}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <p className="text-sm text-purple-800">
+                      <strong>How it works:</strong> Describe the section you want to add to this template. 
+                      AI will generate professional content that you can review and include in your document.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Placeholder Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., {{ai_liability_clause}}"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      value={aiPrompt.split('|')[0] || ''}
+                      onChange={(e) => {
+                        const parts = aiPrompt.split('|')
+                        parts[0] = e.target.value
+                        setAiPrompt(parts.join('|'))
+                      }}
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      This placeholder will be used in your template
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Section Description / Instructions
+                    </label>
+                    <textarea
+                      rows={6}
+                      placeholder="Describe what content should be generated. Be specific about tone, length, and any requirements. For example: 'Generate a liability limitation clause that protects the service provider while maintaining professional tone. Include standard indemnification language.'"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      value={aiPrompt.split('|')[1] || ''}
+                      onChange={(e) => {
+                        const placeholder = aiPrompt.split('|')[0] || ''
+                        setAiPrompt(`${placeholder}|${e.target.value}`)
+                      }}
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      Provide clear instructions for the AI to generate relevant content
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Example:</strong> "Generate a confidentiality clause for a consulting agreement. 
+                      It should cover non-disclosure obligations, permitted disclosures, and survival of terms after agreement termination."
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setShowAIModal(false)
+                      setAiPrompt('')
+                    }}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerateAISection}
+                    disabled={generatingAI || !aiPrompt.trim() || !aiPrompt.includes('|')}
+                    className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {generatingAI ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5" />
+                        Generate AI Section
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
