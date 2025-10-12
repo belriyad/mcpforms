@@ -17,6 +17,8 @@ import {
   ArrowRight,
   Loader2
 } from 'lucide-react'
+import { SearchBar } from '@/components/ui/SearchBar'
+import { StatsCard } from '@/components/ui/StatsCard'
 
 interface Service {
   id: string
@@ -42,6 +44,7 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | Service['status']>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   // Load services from Firestore
@@ -83,6 +86,15 @@ export default function ServicesPage() {
   const filteredServices = filter === 'all' 
     ? services 
     : services.filter(s => s.status === filter)
+
+  // Apply search filter
+  const searchedServices = searchQuery.trim()
+    ? filteredServices.filter(s => 
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.clientEmail.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : filteredServices
 
   const getStatusBadge = (status: Service['status']) => {
     const config = STATUS_CONFIG[status]
@@ -202,6 +214,14 @@ export default function ServicesPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 mb-6">
+          <div className="mb-4">
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search services by name, client, or email..."
+              className="max-w-md"
+            />
+          </div>
           <div className="flex items-center gap-2 overflow-x-auto">
             <button
               onClick={() => setFilter('all')}
@@ -234,21 +254,27 @@ export default function ServicesPage() {
 
         {/* Services List */}
         <div className="space-y-4">
-          {filteredServices.length === 0 ? (
+          {searchedServices.length === 0 ? (
             <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-200">
               <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No services found</h3>
-              <p className="text-gray-600 mb-6">Get started by creating your first service</p>
-              <button
-                onClick={() => router.push('/admin/services/create')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
-              >
-                <Plus className="w-5 h-5" />
-                Create Service
-              </button>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                {searchQuery ? 'No services match your search' : 'No services found'}
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {searchQuery ? 'Try adjusting your search terms' : 'Get started by creating your first service'}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={() => router.push('/admin/services/create')}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Service
+                </button>
+              )}
             </div>
           ) : (
-            filteredServices.map((service) => (
+            searchedServices.map((service) => (
               <div
                 key={service.id}
                 className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-all"
