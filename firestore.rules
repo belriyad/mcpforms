@@ -117,6 +117,30 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
     
+    // Intake Forms - client intake form data (NEW)
+    match /intakeForms/{intakeFormId} {
+      allow read: if isAuthenticated() && 
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy intake forms
+                       isAdmin()
+                     );
+      allow create: if isLawyerOrAdmin() && 
+                       request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow updating legacy intake forms
+                         isAdmin()
+                       );
+      allow delete: if isAuthenticated() && 
+                       (
+                         resource.data.createdBy == request.auth.uid || 
+                         !('createdBy' in resource.data) ||  // Allow deleting legacy intake forms
+                         isAdmin()
+                       );
+    }
+    
     // Intakes - client form submissions
     // MIGRATION MODE: Allow access to intakes without createdBy field
     match /intakes/{intakeId} {

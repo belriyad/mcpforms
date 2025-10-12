@@ -155,6 +155,12 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
     
     setGeneratingAI(true)
     try {
+      console.log('🤖 Generating AI section...', {
+        serviceId: service.id,
+        templateId: selectedTemplateId,
+        promptLength: aiPrompt.length
+      })
+      
       const response = await fetch('/api/services/generate-ai-section', {
         method: 'POST',
         headers: {
@@ -168,6 +174,14 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       })
 
       const result = await response.json()
+      
+      // Log full response for debugging
+      console.log('📥 AI Generation Response:', {
+        status: response.status,
+        success: result.success,
+        error: result.error,
+        details: result.details
+      })
 
       if (result.success) {
         alert('✅ AI section generated successfully!')
@@ -176,11 +190,15 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         setSelectedTemplateId(null)
         // Service will update automatically via onSnapshot
       } else {
-        alert(`❌ Failed to generate AI section: ${result.error}`)
+        // Show detailed error message
+        const errorMsg = result.error || 'Unknown error'
+        const errorDetails = result.details ? `\n\nDetails: ${result.details}` : ''
+        console.error('❌ AI Generation Error:', result)
+        alert(`❌ Failed to generate AI section\n\nError: ${errorMsg}${errorDetails}\n\nPlease check the browser console for more details.`)
       }
     } catch (error) {
-      console.error('Error generating AI section:', error)
-      alert('❌ Failed to generate AI section. Please try again.')
+      console.error('❌ Exception during AI generation:', error)
+      alert(`❌ Failed to generate AI section\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check the browser console for details.`)
     } finally {
       setGeneratingAI(false)
     }
