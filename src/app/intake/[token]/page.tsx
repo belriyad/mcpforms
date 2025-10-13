@@ -6,6 +6,8 @@ import { useForm } from 'react-hook-form'
 import { LoadingSpinner, ProgressIndicator } from '@/components/ui/loading-components'
 import { showSuccessToast, showErrorToast } from '@/lib/toast-helpers'
 import CustomerCustomization from '@/components/intake/CustomerCustomization'
+import { getBrandingByServiceId, Branding, DEFAULT_BRANDING, getBrandingCSSVariables } from '@/lib/branding'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 import { Shield, Lock, Save, CheckCircle, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -54,8 +56,11 @@ export default function IntakeFormPage() {
   const [customFields, setCustomFields] = useState<any[]>([])
   const [customClauses, setCustomClauses] = useState<any[]>([])
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING)
   
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm()
+
+  const brandingEnabled = isFeatureEnabled('brandingBasic')
 
   // Calculate form completion progress
   const formData = watch()
@@ -132,6 +137,17 @@ export default function IntakeFormPage() {
       if (validatedData.status === 'submitted') {
         setIsSubmitted(true)
         console.log('📝 Form already submitted, auto-save disabled')
+      }
+      
+      // Feature #18: Load branding if enabled
+      if (brandingEnabled && data.serviceId) {
+        try {
+          const serviceBranding = await getBrandingByServiceId(data.serviceId);
+          setBranding(serviceBranding);
+        } catch (err) {
+          console.error('Failed to load branding:', err);
+          // Continue with default branding
+        }
       }
       
       // Pre-fill form with existing data
@@ -369,8 +385,30 @@ export default function IntakeFormPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div 
+      className="min-h-screen bg-gray-50 py-8"
+      style={brandingEnabled ? { 
+        ['--brand-accent' as any]: branding.accentColor,
+        ['--brand-primary' as any]: branding.primaryColor,
+      } : undefined}
+    >
       <div className="max-w-2xl mx-auto px-4">
+        {/* Branding Header */}
+        {brandingEnabled && (branding.logoUrl || branding.companyName !== 'MCPForms') && (
+          <div className="mb-6 text-center">
+            {branding.logoUrl && (
+              <img 
+                src={branding.logoUrl} 
+                alt={branding.companyName}
+                className="h-16 mx-auto mb-2 object-contain"
+              />
+            )}
+            {branding.tagline && (
+              <p className="text-sm text-gray-600">{branding.tagline}</p>
+            )}
+          </div>
+        )}
+        
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">{intakeData.serviceName}</h1>
           <p className="text-gray-600 mb-6">{intakeData.serviceDescription}</p>
@@ -493,7 +531,10 @@ export default function IntakeFormPage() {
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="btn btn-primary px-8 py-3 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 hover-scale disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="btn btn-primary px-8 py-3 text-lg font-semibold transition-all duration-300 hover-scale disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      style={brandingEnabled ? {
+                        background: `linear-gradient(to right, ${branding.accentColor}, ${branding.primaryColor})`,
+                      } : undefined}
                     >
                       {submitting ? (
                         <>
@@ -516,7 +557,10 @@ export default function IntakeFormPage() {
 
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-500">
-            Powered by Smart Forms AI
+            {brandingEnabled && branding.companyName !== 'MCPForms' 
+              ? `Powered by ${branding.companyName}`
+              : 'Powered by Smart Forms AI'
+            }
           </p>
         </div>
       </div>
