@@ -9,7 +9,10 @@ import { Service } from '@/types/service'
 import ViewResponsesModal from '@/components/ViewResponsesModal'
 import EditResponsesModal from '@/components/EditResponsesModal'
 import AIPreviewModal from '@/components/admin/AIPreviewModal'
+import PromptLibrary from '@/components/admin/PromptLibrary'
+import PromptEditor from '@/components/admin/PromptEditor'
 import { isFeatureEnabled } from '@/lib/feature-flags'
+import { savePrompt, incrementPromptUsage, AIPrompt } from '@/lib/prompts-client'
 import { 
   ArrowLeft,
   FileText,
@@ -52,6 +55,11 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [showAIPreview, setShowAIPreview] = useState(false)
   const [aiPreviewData, setAiPreviewData] = useState<any>(null)
   const [isRegenerating, setIsRegenerating] = useState(false)
+
+  // Prompt Library state (Feature #12)
+  const [showPromptLibrary, setShowPromptLibrary] = useState(false)
+  const [showPromptEditor, setShowPromptEditor] = useState(false)
+  const [editingPrompt, setEditingPrompt] = useState<AIPrompt | null>(null)
 
   // Load service from Firestore with real-time updates
   useEffect(() => {
@@ -306,6 +314,59 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
     } finally {
       setIsRegenerating(false)
     }
+  }
+
+  // Feature #12: Prompt Library handlers
+  const handleSelectPrompt = async (prompt: AIPrompt) => {
+    // Populate the AI input fields with the selected prompt
+    const placeholder = prompt.placeholder || '';
+    const body = prompt.body;
+    setAiPrompt(`${placeholder}|${body}`);
+    setShowPromptLibrary(false);
+
+    // Increment usage count
+    if (user) {
+      try {
+        await incrementPromptUsage(user.uid, prompt.id);
+      } catch (error) {
+        console.error('Failed to increment prompt usage:', error);
+      }
+    }
+  }
+
+  const handleSaveCurrentPromptToLibrary = async () => {
+    if (!user || !aiPrompt.trim()) return;
+
+    const parts = aiPrompt.split('|');
+    const placeholder = parts[0]?.trim() || '';
+    const body = parts[1]?.trim() || '';
+
+    if (!body) {
+      alert('Please enter a prompt description first');
+      return;
+    }
+
+    setShowPromptEditor(true);
+  }
+
+  const handleSavePrompt = async (promptData: Omit<AIPrompt, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => {
+    if (!user) return;
+
+    try {
+      await savePrompt(user.uid, promptData);
+      alert('✅ Prompt saved to library!');
+      setShowPromptEditor(false);
+      setEditingPrompt(null);
+    } catch (error) {
+      console.error('Failed to save prompt:', error);
+      throw error;
+    }
+  }
+
+  const handleEditPrompt = (prompt: AIPrompt) => {
+    setEditingPrompt(prompt);
+    setShowPromptEditor(true);
+    setShowPromptLibrary(false);
   }
 
   const handleGenerateDocuments = async () => {
@@ -1064,6 +1125,27 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                       It should cover non-disclosure obligations, permitted disclosures, and survival of terms after agreement termination."
                     </p>
                   </div>
+
+                  {/* Feature #12: Prompt Library Actions */}
+                  {isFeatureEnabled('promptLibrary') && user && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowPromptLibrary(true)}
+                        className="flex-1 px-4 py-2 border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Browse Saved Prompts
+                      </button>
+                      <button
+                        onClick={handleSaveCurrentPromptToLibrary}
+                        disabled={!aiPrompt.split('|')[1]?.trim()}
+                        className="flex-1 px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <FileCheck className="w-4 h-4" />
+                        Save to Library
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
@@ -1117,6 +1199,28 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               onAccept={handleAcceptAI}
               onRegenerate={handleRegenerateAI}
               isRegenerating={isRegenerating}
+            />
+          )}
+
+          {/* Feature #12: Prompt Library Modal */}
+          {showPromptLibrary && user && isFeatureEnabled('promptLibrary') && (
+            <PromptLibrary
+              userId={user.uid}
+              onSelect={handleSelectPrompt}
+              onEdit={handleEditPrompt}
+              onClose={() => setShowPromptLibrary(false)}
+            />
+          )}
+
+          {/* Feature #12: Prompt Editor Modal */}
+          {showPromptEditor && user && isFeatureEnabled('promptLibrary') && (
+            <PromptEditor
+              prompt={editingPrompt}
+              onSave={handleSavePrompt}
+              onClose={() => {
+                setShowPromptEditor(false);
+                setEditingPrompt(null);
+              }}
             />
           )}
         </>
