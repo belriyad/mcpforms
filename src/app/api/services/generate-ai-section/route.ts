@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb } from '@/lib/firebase-admin'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
+// Reduced temperature for legal content (per MVP instructions)
+const AI_TEMPERATURE = 0.3  // Was 0.7 - now more consistent/predictable
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { serviceId, templateId, prompt: combinedPrompt } = body
+    const { serviceId, templateId, prompt: combinedPrompt, previewMode } = body
 
     if (!serviceId || !templateId || !combinedPrompt) {
       return NextResponse.json(
@@ -107,7 +111,8 @@ The generated content should be complete and ready for immediate use in a profes
     console.log('🤖 Sending to OpenAI:', {
       model: 'gpt-4o-mini',
       promptLength: actualPrompt.length,
-      temperature: 0.7
+      temperature: AI_TEMPERATURE,  // 0.3 for legal content
+      previewMode: previewMode || false
     })
 
     const completion = await openai.chat.completions.create({
@@ -116,7 +121,7 @@ The generated content should be complete and ready for immediate use in a profes
         { role: 'system', content: systemPrompt },
         { role: 'user', content: actualPrompt }
       ],
-      temperature: 0.7,
+      temperature: AI_TEMPERATURE,  // Consistent, predictable output for legal text
       max_tokens: 1000
     })
 
@@ -124,7 +129,8 @@ The generated content should be complete and ready for immediate use in a profes
 
     console.log('✅ OpenAI Response:', {
       contentLength: generatedContent.length,
-      preview: generatedContent.substring(0, 100) + '...'
+      preview: generatedContent.substring(0, 100) + '...',
+      temperature: AI_TEMPERATURE
     })
 
     if (!generatedContent) {
@@ -134,6 +140,34 @@ The generated content should be complete and ready for immediate use in a profes
       )
     }
 
+    // Check if preview mode is enabled (Feature #13)
+    const usePreviewMode = previewMode !== false  // Default to preview mode unless explicitly disabled
+
+    if (usePreviewMode) {
+      // Preview Mode: Return data for AI Preview Modal (Feature #13)
+      console.log('🔍 Preview mode: Returning generation data for review')
+      
+      return NextResponse.json({
+        success: true,
+        preview: true,
+        data: {
+          content: generatedContent,
+          prompt: actualPrompt,
+          placeholder,
+          templateName: template.name,
+          model: 'gpt-4o-mini',
+          temperature: AI_TEMPERATURE,
+          generatedAt: new Date().toISOString(),
+          // Temporary ID for tracking during preview
+          tempId: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        },
+        message: 'AI content generated - review required'
+      })
+    }
+
+    // Legacy Mode: Auto-save (for backward compatibility if preview disabled)
+    console.log('💾 Legacy mode: Auto-saving AI section')
+
     // Create AI section object with placeholder field
     const aiSection = {
       id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -141,8 +175,10 @@ The generated content should be complete and ready for immediate use in a profes
       placeholder,  // IMPORTANT: Store placeholder for document generation
       prompt: actualPrompt,  // Store clean prompt without placeholder
       generatedContent,
-      approved: false,
-      createdAt: new Date().toISOString()
+      approved: true,  // Auto-approved in legacy mode
+      createdAt: new Date().toISOString(),
+      model: 'gpt-4o-mini',
+      temperature: AI_TEMPERATURE
     }
 
     console.log('💾 Saving AI section:', {
