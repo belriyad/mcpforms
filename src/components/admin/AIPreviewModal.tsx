@@ -31,10 +31,12 @@ interface AIPreviewModalProps {
   prompt: string
   placeholder: string
   templateName: string
-  onAccept: (content: string, edits?: string) => Promise<void>
+  onAccept: (content: string, edits?: string, feedback?: 'positive' | 'negative' | null) => Promise<void>
   onRegenerate: () => Promise<void>
   isRegenerating?: boolean
   confidenceScore?: number
+  model?: string
+  temperature?: number
 }
 
 export default function AIPreviewModal({
@@ -47,7 +49,9 @@ export default function AIPreviewModal({
   onAccept,
   onRegenerate,
   isRegenerating = false,
-  confidenceScore
+  confidenceScore,
+  model,
+  temperature
 }: AIPreviewModalProps) {
   const [editedContent, setEditedContent] = useState(generatedContent)
   const [isAccepting, setIsAccepting] = useState(false)
@@ -103,7 +107,7 @@ export default function AIPreviewModal({
     try {
       setIsAccepting(true)
       const edits = editedContent !== generatedContent ? editedContent : undefined
-      await onAccept(editedContent, edits)
+      await onAccept(editedContent, edits, userFeedback)
       // Modal will close via parent component
     } catch (error) {
       console.error('Failed to accept AI content:', error)

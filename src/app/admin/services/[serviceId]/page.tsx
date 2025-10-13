@@ -8,6 +8,8 @@ import { useAuth } from '@/lib/auth/AuthProvider'
 import { Service } from '@/types/service'
 import ViewResponsesModal from '@/components/ViewResponsesModal'
 import EditResponsesModal from '@/components/EditResponsesModal'
+import AIPreviewModal from '@/components/admin/AIPreviewModal'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 import { 
   ArrowLeft,
   FileText,
@@ -45,6 +47,11 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [aiPrompt, setAiPrompt] = useState('')
   const [generatingAI, setGeneratingAI] = useState(false)
+
+  // AI Preview Modal state (Feature #13)
+  const [showAIPreview, setShowAIPreview] = useState(false)
+  const [aiPreviewData, setAiPreviewData] = useState<any>(null)
+  const [isRegenerating, setIsRegenerating] = useState(false)
 
   // Load service from Firestore with real-time updates
   useEffect(() => {
@@ -179,15 +186,25 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       console.log('📥 AI Generation Response:', {
         status: response.status,
         success: result.success,
+        preview: result.preview,
         error: result.error,
         details: result.details
       })
 
       if (result.success) {
-        alert('✅ AI section generated successfully!')
-        setShowAIModal(false)
-        setAiPrompt('')
-        setSelectedTemplateId(null)
+        // Feature #13: Preview-first workflow (if enabled)
+        if (result.preview && isFeatureEnabled('aiPreviewModal')) {
+          console.log('✨ Opening AI Preview Modal with data:', result.data)
+          setAiPreviewData(result.data)
+          setShowAIPreview(true)
+          setShowAIModal(false) // Close input modal, open preview modal
+        } else {
+          // Legacy: auto-save (backward compatible)
+          alert('✅ AI section generated successfully!')
+          setShowAIModal(false)
+          setAiPrompt('')
+          setSelectedTemplateId(null)
+        }
         // Service will update automatically via onSnapshot
       } else {
         // Show detailed error message
@@ -201,6 +218,93 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       alert(`❌ Failed to generate AI section\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check the browser console for details.`)
     } finally {
       setGeneratingAI(false)
+    }
+  }
+
+  const handleAcceptAI = async (finalContent: string, userEdits?: string, feedback?: 'positive' | 'negative' | null) => {
+    if (!service || !aiPreviewData) return
+
+    try {
+      console.log('✅ Accepting AI section...', {
+        serviceId: service.id,
+        contentLength: finalContent.length,
+        hasEdits: !!userEdits,
+        feedback
+      })
+
+      const response = await fetch('/api/services/accept-ai-section', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          serviceId: service.id,
+          templateId: aiPreviewData.templateId || selectedTemplateId,
+          placeholder: aiPreviewData.placeholder,
+          prompt: aiPreviewData.prompt,
+          originalContent: aiPreviewData.content,
+          content: finalContent,
+          model: aiPreviewData.model,
+          temperature: aiPreviewData.temperature,
+          generatedAt: aiPreviewData.generatedAt,
+          userEdits,
+          feedback: feedback || null,
+          tempId: aiPreviewData.tempId
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        console.log('✅ AI section accepted successfully')
+        setShowAIPreview(false)
+        setAiPreviewData(null)
+        setAiPrompt('')
+        setSelectedTemplateId(null)
+        // Service will update automatically via onSnapshot
+      } else {
+        console.error('❌ Accept Error:', result)
+        alert(`❌ Failed to accept AI section: ${result.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('❌ Exception during AI acceptance:', error)
+      alert(`❌ Failed to accept AI section: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  const handleRegenerateAI = async () => {
+    if (!service || !aiPreviewData) return
+
+    setIsRegenerating(true)
+    try {
+      console.log('🔄 Regenerating AI section with same prompt...')
+
+      const response = await fetch('/api/services/generate-ai-section', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          serviceId: service.id,
+          templateId: aiPreviewData.templateId || selectedTemplateId,
+          prompt: aiPreviewData.prompt
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success && result.preview) {
+        console.log('✨ Regenerated content received')
+        setAiPreviewData(result.data) // Update preview with new content
+      } else {
+        console.error('❌ Regeneration Error:', result)
+        alert(`❌ Failed to regenerate: ${result.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('❌ Exception during regeneration:', error)
+      alert(`❌ Failed to regenerate: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsRegenerating(false)
     }
   }
 
@@ -992,6 +1096,28 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                 </div>
               </div>
             </div>
+          )}
+
+          {/* AI Preview Modal (Feature #13) */}
+          {aiPreviewData && (
+            <AIPreviewModal
+              isOpen={showAIPreview}
+              onClose={() => {
+                setShowAIPreview(false)
+                setAiPreviewData(null)
+                setAiPrompt('')
+                setSelectedTemplateId(null)
+              }}
+              generatedContent={aiPreviewData.content}
+              prompt={aiPreviewData.prompt}
+              placeholder={aiPreviewData.placeholder}
+              templateName={aiPreviewData.templateName}
+              model={aiPreviewData.model}
+              temperature={aiPreviewData.temperature}
+              onAccept={handleAcceptAI}
+              onRegenerate={handleRegenerateAI}
+              isRegenerating={isRegenerating}
+            />
           )}
         </>
       )}
