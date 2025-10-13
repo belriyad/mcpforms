@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { sendEmail, isEmailConfigured } from '@/lib/email'
-import { createSubmissionNotificationEmail } from '@/lib/email-templates'
+import { sendIntakeSubmittedEmail } from '@/lib/email-service'
+import { getBranding } from '@/lib/branding'
 
 export async function POST(
   request: NextRequest,
@@ -105,30 +105,24 @@ export async function POST(
     }
 
     // Send email notification to lawyer
-    if (isEmailConfigured() && service.lawyerEmail) {
+    if (service.lawyerEmail) {
       try {
-        const serviceUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/services/${serviceDoc.id}`
+        // Get branding for email template
+        const branding = await getBranding(service.createdBy)
         
-        const { subject, html } = createSubmissionNotificationEmail({
-          lawyerName: service.lawyerName || 'Lawyer',
-          lawyerEmail: service.lawyerEmail,
-          clientName: service.clientName,
-          clientEmail: service.clientEmail,
-          serviceName: service.name,
-          serviceId: serviceDoc.id,
-          serviceUrl,
-          totalFields: Object.keys(formData).length,
-          submittedAt: new Date().toLocaleString()
-        })
-
-        const emailResult = await sendEmail({
-          to: service.lawyerEmail,
-          subject,
-          html
-        })
+        // Send notification
+        const emailResult = await sendIntakeSubmittedEmail(
+          service.lawyerEmail,
+          service.name,
+          service.clientName,
+          service.clientEmail,
+          serviceDoc.id,
+          new Date(),
+          branding
+        )
 
         if (emailResult.success) {
-          console.log('✅ Lawyer notification email sent')
+          console.log('✅ Intake notification email sent:', emailResult.messageId)
           
           // Log email sent activity
           try {
@@ -140,7 +134,8 @@ export async function POST(
               meta: {
                 emailTemplate: 'intake_submitted',
                 recipientEmail: service.lawyerEmail,
-                clientName: service.clientName,
+                messageId: emailResult.messageId,
+                devMode: emailResult.devMode || false
               }
             });
             console.log('📝 Logged email sent activity');
@@ -148,14 +143,31 @@ export async function POST(
             console.error('⚠️ Failed to log email activity:', logError);
           }
         } else {
-          console.error('❌ Failed to send lawyer notification:', emailResult.error)
+          console.error('❌ Failed to send intake notification:', emailResult.error)
+          
+          // Log failed email attempt
+          try {
+            await adminDb.collection('activityLogs').add({
+              type: 'email_failed',
+              userId: service.createdBy || 'unknown',
+              serviceId: serviceDoc.id,
+              timestamp: Timestamp.now(),
+              meta: {
+                emailTemplate: 'intake_submitted',
+                recipientEmail: service.lawyerEmail,
+                error: emailResult.error
+              }
+            });
+          } catch (logError) {
+            console.error('⚠️ Failed to log email failure:', logError);
+          }
         }
       } catch (emailError) {
-        console.error('❌ Error sending lawyer notification:', emailError)
+        console.error('❌ Error sending intake notification:', emailError)
         // Don't fail the submission if email fails
       }
     } else {
-      console.warn('⚠️ Email not configured or no lawyer email - notification not sent')
+      console.warn('⚠️ No lawyer email configured - notification not sent')
     }
 
     return NextResponse.json({

@@ -3,6 +3,8 @@ import { getAdminDb, getAdminStorage, isAdminInitialized } from '@/lib/firebase-
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { Service } from '@/types/service'
 import { generateDocument, prepareTemplateData } from '@/lib/document-generator'
+import { sendDocumentsReadyEmail } from '@/lib/email-service'
+import { getBranding } from '@/lib/branding'
 
 export async function POST(request: NextRequest) {
   try {
@@ -306,6 +308,76 @@ export async function POST(request: NextRequest) {
     } catch (metricsError) {
       console.error('⚠️ Failed to update usage metrics:', metricsError);
       // Don't fail the request if metrics update fails
+    }
+
+    // Send email notification to client about ready documents
+    if (service.clientEmail && successfulDocs > 0) {
+      try {
+        // Get branding for email template
+        const branding = await getBranding(service.createdBy)
+        
+        // Get list of successful document names
+        const documentNames = generatedDocuments
+          .filter(d => d.downloadUrl)
+          .map(d => d.fileName)
+        
+        // Send notification
+        const emailResult = await sendDocumentsReadyEmail(
+          service.clientEmail,
+          service.name,
+          successfulDocs,
+          documentNames,
+          serviceId,
+          branding
+        )
+
+        if (emailResult.success) {
+          console.log('✅ Documents ready notification sent to client:', emailResult.messageId)
+          
+          // Log email sent activity
+          try {
+            await adminDb.collection('activityLogs').add({
+              type: 'email_sent',
+              userId: service.createdBy || 'unknown',
+              serviceId: serviceId,
+              timestamp: Timestamp.now(),
+              meta: {
+                emailTemplate: 'documents_ready',
+                recipientEmail: service.clientEmail,
+                documentCount: successfulDocs,
+                messageId: emailResult.messageId,
+                devMode: emailResult.devMode || false
+              }
+            });
+          } catch (logError) {
+            console.error('⚠️ Failed to log email activity:', logError);
+          }
+        } else {
+          console.error('❌ Failed to send documents ready notification:', emailResult.error)
+          
+          // Log failed email attempt
+          try {
+            await adminDb.collection('activityLogs').add({
+              type: 'email_failed',
+              userId: service.createdBy || 'unknown',
+              serviceId: serviceId,
+              timestamp: Timestamp.now(),
+              meta: {
+                emailTemplate: 'documents_ready',
+                recipientEmail: service.clientEmail,
+                error: emailResult.error
+              }
+            });
+          } catch (logError) {
+            console.error('⚠️ Failed to log email failure:', logError);
+          }
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending documents ready notification:', emailError)
+        // Don't fail the request if email fails
+      }
+    } else if (!service.clientEmail) {
+      console.warn('⚠️ No client email configured - notification not sent')
     }
 
     const successCount = generatedDocuments.filter(doc => doc.downloadUrl).length
