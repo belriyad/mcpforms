@@ -128,3 +128,4 @@ trace*.zip
 server.log
 server_error.log
 *.log
+.vercel
