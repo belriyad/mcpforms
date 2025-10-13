@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getAdminDb } from '@/lib/firebase-admin'
 import OpenAI from 'openai'
 
@@ -167,6 +167,26 @@ The generated content should be complete and ready for immediate use in a profes
       templates: updatedTemplates,
       updatedAt: FieldValue.serverTimestamp()
     })
+
+    // Log AI section generation activity
+    try {
+      await adminDb.collection('activityLogs').add({
+        type: 'ai_section_generated',
+        userId: serviceData.createdBy || 'unknown',
+        serviceId: serviceId,
+        timestamp: Timestamp.now(),
+        meta: {
+          placeholder,
+          templateName: template.name,
+          promptLength: actualPrompt.length,
+          contentLength: generatedContent.length,
+        }
+      });
+      console.log('📝 Logged AI section generation activity');
+    } catch (logError) {
+      console.error('⚠️ Failed to log AI generation:', logError);
+      // Don't fail the request if logging fails
+    }
 
     return NextResponse.json({
       success: true,

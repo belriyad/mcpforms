@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminDb, getAdminStorage, isAdminInitialized } from '@/lib/firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { Service } from '@/types/service'
 import { generateDocument, prepareTemplateData } from '@/lib/document-generator'
 
@@ -255,6 +255,27 @@ export async function POST(request: NextRequest) {
     })
 
     console.log('✅ Service updated with generated documents and download URLs')
+
+    // Log activity for each successfully generated document
+    try {
+      for (const doc of generatedDocuments.filter(d => d.downloadUrl)) {
+        await adminDb.collection('activityLogs').add({
+          type: 'doc_generated',
+          userId: service.createdBy || 'unknown',
+          serviceId: serviceId,
+          timestamp: Timestamp.now(),
+          meta: {
+            documentName: doc.fileName,
+            templateName: doc.templateName,
+            clientName: service.clientName,
+          }
+        });
+      }
+      console.log(`📝 Logged ${generatedDocuments.filter(d => d.downloadUrl).length} document generation activities`);
+    } catch (logError) {
+      console.error('⚠️ Failed to log activity:', logError);
+      // Don't fail the request if logging fails
+    }
 
     const successCount = generatedDocuments.filter(doc => doc.downloadUrl).length
     const failedCount = generatedDocuments.length - successCount

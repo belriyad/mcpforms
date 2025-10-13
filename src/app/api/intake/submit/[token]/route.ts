@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { createSubmissionNotificationEmail } from '@/lib/email-templates'
 
@@ -83,6 +83,27 @@ export async function POST(
 
     console.log('✅ Intake form submitted successfully for service:', serviceDoc.id)
 
+    // Log intake submission activity
+    try {
+      await adminDb.collection('activityLogs').add({
+        type: 'intake_submitted',
+        userId: service.createdBy || 'unknown',
+        serviceId: serviceDoc.id,
+        intakeId: token,
+        timestamp: Timestamp.now(),
+        meta: {
+          serviceName: service.name,
+          clientName: service.clientName,
+          clientEmail: service.clientEmail,
+          fieldsSubmitted: Object.keys(formData).length,
+        }
+      });
+      console.log('📝 Logged intake submission activity');
+    } catch (logError) {
+      console.error('⚠️ Failed to log intake submission:', logError);
+      // Don't fail the request if logging fails
+    }
+
     // Send email notification to lawyer
     if (isEmailConfigured() && service.lawyerEmail) {
       try {
@@ -108,6 +129,24 @@ export async function POST(
 
         if (emailResult.success) {
           console.log('✅ Lawyer notification email sent')
+          
+          // Log email sent activity
+          try {
+            await adminDb.collection('activityLogs').add({
+              type: 'email_sent',
+              userId: service.createdBy || 'unknown',
+              serviceId: serviceDoc.id,
+              timestamp: Timestamp.now(),
+              meta: {
+                emailTemplate: 'intake_submitted',
+                recipientEmail: service.lawyerEmail,
+                clientName: service.clientName,
+              }
+            });
+            console.log('📝 Logged email sent activity');
+          } catch (logError) {
+            console.error('⚠️ Failed to log email activity:', logError);
+          }
         } else {
           console.error('❌ Failed to send lawyer notification:', emailResult.error)
         }
