@@ -277,6 +277,37 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if logging fails
     }
 
+    // Increment usage metrics for each successfully generated document
+    try {
+      const successfulDocCount = generatedDocuments.filter(d => d.downloadUrl).length;
+      if (successfulDocCount > 0 && service.createdBy) {
+        const today = new Date().toISOString().split('T')[0];
+        const usageDocPath = `usageDaily/${service.createdBy}/${today}`;
+        const usageDocRef = adminDb.doc(usageDocPath);
+        
+        const usageSnapshot = await usageDocRef.get();
+        if (usageSnapshot.exists) {
+          // Increment existing count
+          await usageDocRef.update({
+            docGeneratedCount: FieldValue.increment(successfulDocCount),
+            lastUpdated: Timestamp.now(),
+          });
+        } else {
+          // Create new daily record
+          await usageDocRef.set({
+            userId: service.createdBy,
+            date: today,
+            docGeneratedCount: successfulDocCount,
+            lastUpdated: Timestamp.now(),
+          });
+        }
+        console.log(`📊 Incremented usage metrics by ${successfulDocCount} for user ${service.createdBy}`);
+      }
+    } catch (metricsError) {
+      console.error('⚠️ Failed to update usage metrics:', metricsError);
+      // Don't fail the request if metrics update fails
+    }
+
     const successCount = generatedDocuments.filter(doc => doc.downloadUrl).length
     const failedCount = generatedDocuments.length - successCount
 

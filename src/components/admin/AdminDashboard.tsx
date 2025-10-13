@@ -12,6 +12,7 @@ import IntakeMonitor from './IntakeMonitor'
 import IntakeCustomizationManager from './IntakeCustomizationManager'
 import { FileText, Settings, Inbox, Sparkles, LogOut, TrendingUp, Zap } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import UsageWidget from './UsageWidget'
 
 type TabType = 'templates' | 'services' | 'intakes' | 'customizations'
 
@@ -260,6 +261,11 @@ export default function AdminDashboard() {
               <p className="text-3xl font-bold text-gray-900">{stats.customizations}</p>
             </div>
           </Card>
+        </div>
+
+        {/* Usage Metrics Widget */}
+        <div className="mt-6">
+          <UsageWidget />
         </div>
       </div>
 
