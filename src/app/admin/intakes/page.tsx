@@ -17,6 +17,8 @@ import {
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import ErrorState from '@/components/ui/ErrorState'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 
 interface IntakeForm {
   id: string
@@ -36,6 +38,8 @@ export default function IntakesPage() {
   const [intakes, setIntakes] = useState<IntakeForm[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const emptyErrorStatesEnabled = isFeatureEnabled('emptyErrorStates')
 
   useEffect(() => {
     if (!user?.uid) return
@@ -53,9 +57,11 @@ export default function IntakesPage() {
       })) as IntakeForm[]
       
       setIntakes(intakesData)
+      setError(null)
       setLoading(false)
     }, (error) => {
       console.error('Error loading intakes:', error)
+      setError('Failed to load intake forms')
       setLoading(false)
     })
 
@@ -145,8 +151,33 @@ export default function IntakesPage() {
           </div>
         )}
 
+        {/* Error State */}
+        {!loading && error && (
+          emptyErrorStatesEnabled ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <ErrorState
+                title="Failed to load intakes"
+                message={error}
+                onRetry={() => window.location.reload()}
+                retryLabel="Reload Page"
+                showDetails={false}
+              />
+            </div>
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Reload Page
+              </button>
+            </div>
+          )
+        )}
+
         {/* Search */}
-        {!loading && (
+        {!loading && !error && (
           <>
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 mb-6">
               <SearchBar

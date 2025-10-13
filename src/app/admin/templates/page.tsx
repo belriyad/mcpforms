@@ -19,6 +19,8 @@ import {
 import { SearchBar } from '@/components/ui/SearchBar'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import ErrorState from '@/components/ui/ErrorState'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 
 interface Template {
   id: string
@@ -38,6 +40,7 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState<'all' | Template['status']>('all')
   const [error, setError] = useState<string | null>(null)
+  const emptyErrorStatesEnabled = isFeatureEnabled('emptyErrorStates')
 
   // Load templates from Firestore
   useEffect(() => {
@@ -186,15 +189,27 @@ export default function TemplatesPage() {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-            <p className="text-red-600 mb-4">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Reload Page
-            </button>
-          </div>
+          emptyErrorStatesEnabled ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+              <ErrorState
+                title="Failed to load templates"
+                message={error}
+                onRetry={() => window.location.reload()}
+                retryLabel="Reload Page"
+                showDetails={false}
+              />
+            </div>
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Reload Page
+              </button>
+            </div>
+          )
         )}
 
         {/* Filters and Search */}

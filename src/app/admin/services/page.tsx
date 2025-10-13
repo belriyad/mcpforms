@@ -15,10 +15,14 @@ import {
   Download,
   Mail,
   ArrowRight,
-  Loader2
+  Loader2,
+  Search
 } from 'lucide-react'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { StatsCard } from '@/components/ui/StatsCard'
+import { EmptyState } from '@/components/ui/EmptyState'
+import ErrorState from '@/components/ui/ErrorState'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 
 interface Service {
   id: string
@@ -46,6 +50,7 @@ export default function ServicesPage() {
   const [filter, setFilter] = useState<'all' | Service['status']>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const emptyErrorStatesEnabled = isFeatureEnabled('emptyErrorStates')
 
   // Load services from Firestore
   useEffect(() => {
@@ -151,17 +156,29 @@ export default function ServicesPage() {
             <p className="text-gray-600">Loading services...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-12 text-center mb-8">
-            <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Services</h3>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Reload Page
-            </button>
-          </div>
+          emptyErrorStatesEnabled ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+              <ErrorState
+                title="Failed to load services"
+                message={error}
+                onRetry={() => window.location.reload()}
+                retryLabel="Reload Page"
+                showDetails={false}
+              />
+            </div>
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-12 text-center mb-8">
+              <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Services</h3>
+              <p className="text-gray-600 mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Reload Page
+              </button>
+            </div>
+          )
         ) : (
           <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -255,24 +272,43 @@ export default function ServicesPage() {
         {/* Services List */}
         <div className="space-y-4">
           {searchedServices.length === 0 ? (
-            <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-200">
-              <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                {searchQuery ? 'No services match your search' : 'No services found'}
-              </h3>
-              <p className="text-gray-600 mb-6">
-                {searchQuery ? 'Try adjusting your search terms' : 'Get started by creating your first service'}
-              </p>
-              {!searchQuery && (
-                <button
-                  onClick={() => router.push('/admin/services/create')}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
-                >
-                  <Plus className="w-5 h-5" />
-                  Create Service
-                </button>
-              )}
-            </div>
+            emptyErrorStatesEnabled ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                <EmptyState
+                  icon={searchQuery ? Search : FileText}
+                  title={searchQuery ? 'No services match your search' : 'No services yet'}
+                  description={searchQuery ? 'Try adjusting your search terms or filters' : 'Get started by creating your first service to manage client documents'}
+                  action={!searchQuery ? (
+                    <button
+                      onClick={() => router.push('/admin/services/create')}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Create Service
+                    </button>
+                  ) : undefined}
+                />
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-200">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {searchQuery ? 'No services match your search' : 'No services found'}
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {searchQuery ? 'Try adjusting your search terms' : 'Get started by creating your first service'}
+                </p>
+                {!searchQuery && (
+                  <button
+                    onClick={() => router.push('/admin/services/create')}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create Service
+                  </button>
+                )}
+              </div>
+            )
           ) : (
             searchedServices.map((service) => (
               <div
