@@ -1,8 +1,9 @@
 # 🎉 Firebase Deployment Success
 
 **Date:** October 13, 2025  
-**Status:** ✅ DEPLOYED & LIVE  
-**Production URL:** https://formgenai-4545.web.app
+**Status:** ✅ DEPLOYED & LIVE (VERIFIED)  
+**Production URL:** https://formgenai-4545.web.app  
+**Last Release:** 2025-10-13 15:55:07 GMT
 
 ---
 
@@ -12,9 +13,11 @@
 - **Next.js Application:** 29 pages successfully built and deployed
 - **Static Assets:** 71 files uploaded to Firebase Hosting
 - **Cloud Function:** `ssrformgenai4545` (Node.js 20, 256 MB, us-central1)
+- **Function URL:** https://ssrformgenai4545-cgwsbbjpzq-uc.a.run.app
 - **Additional Functions:** 43 existing Cloud Functions remain active
 - **HTTPS:** Auto-configured with SSL certificate
 - **Status:** HTTP 200 - Site fully operational
+- **ETag:** e7be4d60d7f1ed472a8c615da5a39cc3c697799c18e2165e70eec9ef760fc6b9
 
 ### Tech Stack
 - **Hosting:** Firebase Hosting (with experimental Next.js 14 support)
