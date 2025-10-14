@@ -724,10 +724,16 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
           await safeClick(page, submitButton, 'Submit button');
           
           console.log('⏳ Waiting for form submission...');
-          await page.waitForTimeout(5000);
+          
+          // Wait for success indicators (increased timeout from 5s to 15s)
+          const successResult = await Promise.race([
+            page.waitForSelector('text=/success|submitted|thank you|received/i', { timeout: 15000 }).catch(() => null),
+            page.waitForURL(/success|complete|confirmation/, { timeout: 15000 }).catch(() => null),
+            page.waitForTimeout(15000).then(() => 'timeout')
+          ]);
           
           const successMessage = page.getByText(/success|submitted|thank you|received/i);
-          if (await successMessage.isVisible({ timeout: 5000 }).catch(() => false)) {
+          if (await successMessage.isVisible({ timeout: 2000 }).catch(() => false)) {
             console.log('✅ Form submitted successfully!');
           } else {
             console.log('⚠️  Submit may have worked (no confirmation message)');
@@ -882,6 +888,38 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
           if (documentReady) {
             timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
             await takeScreenshot(page, `${timestamp}-13-doc-ready`, 'Document ready');
+            
+            // Try to verify and download the document
+            console.log('📥 Attempting to verify document download...');
+            const downloadButton = page.getByRole('button', { name: /download/i }).first();
+            
+            if (await downloadButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+              console.log('✅ Download button found!');
+              
+              // Setup download listener
+              const downloadPromise = page.waitForEvent('download', { timeout: 10000 }).catch(() => null);
+              
+              await safeClick(page, downloadButton, 'Download button');
+              const download = await downloadPromise;
+              
+              if (download) {
+                const fileName = download.suggestedFilename();
+                console.log(`✅ Document downloaded: ${fileName}`);
+                console.log(`   File size: ${(await download.createReadStream()).readableLength || 'unknown'} bytes`);
+                
+                // Verify it's a DOCX file
+                if (fileName.toLowerCase().endsWith('.docx')) {
+                  console.log('✅ Verified: Document is a .docx file');
+                } else {
+                  console.log(`⚠️  Warning: Downloaded file is not .docx (${fileName})`);
+                }
+              } else {
+                console.log('⚠️  Download initiated but file not captured');
+              }
+            } else {
+              console.log('ℹ️  Download button not visible (may need to wait longer)');
+            }
+            
             console.log('✅ STEP 9 COMPLETE: Document generated successfully!');
           } else {
             console.log('⚠️  Document may still be processing (no ready message shown)');
@@ -1250,29 +1288,218 @@ test.describe('Individual Core Scenarios', () => {
       
       // Generate document
       console.log('🔍 Looking for generate document button...');
-      const generateButton = page.getByRole('button', { name: /generate document/i }).first();
+      await page.reload(); // Refresh to get latest state
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForTimeout(2000);
+      
+      const generateButton = page.getByRole('button', { name: /generate.*document/i }).first();
       if (await generateButton.isVisible({ timeout: 5000 }).catch(() => false)) {
         await safeClick(page, generateButton, 'Generate Document button');
-        console.log('⏳ Waiting for document generation...');
+        console.log('⏳ Waiting for document generation (up to 15 seconds)...');
         await page.waitForTimeout(5000);
+        
+        // Check for success indicators
+        const successIndicators = [
+          page.locator('text=/successfully generated/i'),
+          page.locator('text=/documents ready/i'),
+          page.getByRole('button', { name: /download/i })
+        ];
+        
+        let documentReady = false;
+        for (const indicator of successIndicators) {
+          if (await indicator.isVisible({ timeout: 10000 }).catch(() => false)) {
+            documentReady = true;
+            console.log('✅ Document generation confirmed!');
+            break;
+          }
+        }
         
         const timestamp3 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
         await takeScreenshot(page, `${timestamp3}-scenario6-03-document-generated`, 'Document generated');
         
-        console.log('='.repeat(60));
-        console.log('✅ SCENARIO 6 COMPLETE: Document generated successfully!');
-        console.log(`🎯 Service ID: ${serviceId}`);
-        console.log('='.repeat(60));
+        if (documentReady) {
+          console.log('='.repeat(60));
+          console.log('✅ SCENARIO 6 COMPLETE: Document generated successfully!');
+          console.log(`🎯 Service ID: ${serviceId}`);
+          console.log('='.repeat(60));
+        } else {
+          console.log('='.repeat(60));
+          console.log('⚠️  SCENARIO 6 PARTIAL: Generation started but not confirmed ready');
+          console.log(`🎯 Service ID: ${serviceId}`);
+          console.log('='.repeat(60));
+        }
       } else {
-        console.log('⚠️  Generate Document button not found (templates may be required)');
+        console.log('⚠️  Generate Document button not found');
+        console.log('   Checking page state...');
+        const pageText = await page.locator('body').textContent();
+        console.log('   Has "Document Generation":', pageText?.includes('Document Generation') || false);
+        console.log('   Has intake submissions:', pageText?.includes('intake_submitted') || pageText?.includes('Submitted') || false);
+        
+        const timestamp3 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+        await takeScreenshot(page, `${timestamp3}-scenario6-03-no-button`, 'No generate button');
+        
         console.log('='.repeat(60));
         console.log('⚠️  SCENARIO 6 PARTIAL: Approved but no document generation available');
+        console.log('   Possible reasons:');
+        console.log('   - Templates may be required');
+        console.log('   - Intake may need to be submitted first');
+        console.log('   - Service may need additional configuration');
         console.log('='.repeat(60));
       }
     } catch (error) {
       console.error('❌ SCENARIO 6 FAILED:', error);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
       await takeScreenshot(page, `${timestamp}-scenario6-error`, 'Error approving/generating document');
+      throw error;
+    }
+  });
+  
+  test('Scenario 7: Generate and Download Document', async ({ page }) => {
+    console.log('\n' + '='.repeat(60));
+    console.log('📥 SCENARIO 7: GENERATE AND DOWNLOAD DOCUMENT');
+    console.log('='.repeat(60));
+    
+    const serviceId = process.env.TEST_SERVICE_ID || 'w9rq4zgEiihA17ZNjhSg';
+    
+    try {
+      // Login first
+      console.log('🔐 Logging in...');
+      await page.goto(`${PRODUCTION_URL}/login`);
+      await safeFill(page, page.getByLabel(/email/i), process.env.TEST_USER_EMAIL!, 'Email');
+      await safeFill(page, page.getByLabel(/password/i), process.env.TEST_USER_PASSWORD!, 'Password');
+      await safeClick(page, page.getByRole('button', { name: /sign in/i }), 'Sign In button');
+      await page.waitForURL('**/admin', { timeout: 60000 });
+      console.log('✅ Logged in successfully');
+      
+      // Navigate to service
+      console.log(`🎯 Navigating to service: ${serviceId}`);
+      await page.goto(`${PRODUCTION_URL}/admin/services/${serviceId}`);
+      await waitForPageReady(page);
+      await page.waitForTimeout(3000);
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+      await takeScreenshot(page, `${timestamp}-scenario7-01-service-page`, 'Service page loaded');
+      
+      // Look for generate document button
+      console.log('🔍 Looking for generate document button...');
+      let generateButton = page.getByRole('button', { name: /generate all documents/i }).first();
+      
+      if (!await generateButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+        generateButton = page.locator('button').filter({ hasText: /generate.*document/i }).first();
+      }
+      
+      if (await generateButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+        console.log('✅ Generate button found!');
+        await safeClick(page, generateButton, 'Generate Document button');
+        console.log('⏳ Document generation initiated...');
+        console.log('⏳ Waiting for generation to complete (up to 20 seconds)...');
+        
+        // Wait and check for completion
+        await page.waitForTimeout(5000);
+        
+        // Refresh to get latest state
+        await page.reload();
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(3000);
+        
+        const timestamp2 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+        await takeScreenshot(page, `${timestamp2}-scenario7-02-after-generation`, 'After generation');
+        
+        // Look for download button
+        console.log('🔍 Looking for download button...');
+        const downloadButton = page.getByRole('button', { name: /download/i }).first();
+        
+        if (await downloadButton.isVisible({ timeout: 10000 }).catch(() => false)) {
+          console.log('✅ Download button found!');
+          
+          // Setup download listener
+          const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
+          
+          console.log('📥 Clicking download button...');
+          await safeClick(page, downloadButton, 'Download button');
+          
+          console.log('⏳ Waiting for download...');
+          const download = await downloadPromise.catch(() => null);
+          
+          if (download) {
+            const fileName = download.suggestedFilename();
+            console.log(`✅ Document downloaded: ${fileName}`);
+            
+            // Verify file type
+            if (fileName.toLowerCase().endsWith('.docx')) {
+              console.log('✅ Verified: File is a .docx document');
+            } else if (fileName.toLowerCase().endsWith('.pdf')) {
+              console.log('✅ Verified: File is a .pdf document');
+            } else {
+              console.log(`⚠️  Warning: Unexpected file type (${fileName})`);
+            }
+            
+            // Save the download
+            const downloadPath = `test-results/downloads/${fileName}`;
+            await download.saveAs(downloadPath);
+            console.log(`💾 File saved to: ${downloadPath}`);
+            
+            const timestamp3 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+            await takeScreenshot(page, `${timestamp3}-scenario7-03-downloaded`, 'Document downloaded');
+            
+            console.log('='.repeat(60));
+            console.log('✅ SCENARIO 7 COMPLETE: Document generated and downloaded!');
+            console.log(`📄 File: ${fileName}`);
+            console.log(`💾 Saved to: ${downloadPath}`);
+            console.log(`🎯 Service ID: ${serviceId}`);
+            console.log('='.repeat(60));
+          } else {
+            console.log('⚠️  Download was initiated but file not received');
+            
+            const timestamp3 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+            await takeScreenshot(page, `${timestamp3}-scenario7-03-download-issue`, 'Download issue');
+            
+            console.log('='.repeat(60));
+            console.log('⚠️  SCENARIO 7 PARTIAL: Button clicked but download not captured');
+            console.log('='.repeat(60));
+          }
+        } else {
+          console.log('⚠️  Download button not found after generation');
+          console.log('   Checking for status messages...');
+          
+          const pageText = await page.locator('body').textContent();
+          console.log('   Has "generated":', pageText?.includes('generated') || pageText?.includes('Generated') || false);
+          console.log('   Has "ready":', pageText?.includes('ready') || pageText?.includes('Ready') || false);
+          console.log('   Has "error":', pageText?.includes('error') || pageText?.includes('Error') || false);
+          
+          const timestamp3 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+          await takeScreenshot(page, `${timestamp3}-scenario7-03-no-download`, 'No download button');
+          
+          console.log('='.repeat(60));
+          console.log('⚠️  SCENARIO 7 PARTIAL: Generated but no download button found');
+          console.log('='.repeat(60));
+        }
+      } else {
+        console.log('❌ Generate Document button not found');
+        console.log('   Checking service state...');
+        
+        const pageText = await page.locator('body').textContent();
+        console.log('   Has "Document Generation" section:', pageText?.includes('Document Generation') || false);
+        console.log('   Has intake submissions:', pageText?.includes('intake_submitted') || pageText?.includes('Submitted') || false);
+        console.log('   Has templates:', pageText?.includes('template') || false);
+        
+        const timestamp2 = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+        await takeScreenshot(page, `${timestamp2}-scenario7-02-no-button`, 'No generate button');
+        
+        console.log('='.repeat(60));
+        console.log('❌ SCENARIO 7 FAILED: No generate button available');
+        console.log('   Prerequisites:');
+        console.log('   ✓ Service must exist');
+        console.log('   ✓ Service must have templates');
+        console.log('   ✓ Intake must be submitted');
+        console.log('   ✓ Check service status is ready for generation');
+        console.log('='.repeat(60));
+        throw new Error('Generate button not found - service may not be ready');
+      }
+    } catch (error) {
+      console.error('❌ SCENARIO 7 FAILED:', error);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('T').slice(0, -5);
+      await takeScreenshot(page, `${timestamp}-scenario7-error`, 'Error generating/downloading document');
       throw error;
     }
   });
