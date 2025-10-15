@@ -131,17 +131,8 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('⏳ Waiting for login...');
     
     // Wait for navigation to admin dashboard (increased timeout)
-    try {
-      await page.waitForURL('**/admin**', { timeout: 15000 });
-      console.log('✅ Login successful!');
-    } catch (error) {
-      await page.screenshot({ path: 'test-results/e2e-error-login.png', fullPage: true });
-      const currentUrl = page.url();
-      const pageText = await page.locator('body').textContent();
-      console.error(`❌ Login failed. Current URL: ${currentUrl}`);
-      console.error(`Page content: ${pageText?.substring(0, 500)}`);
-      throw new Error(`Login failed. Current URL: ${currentUrl}`);
-    }
+    await page.waitForURL('**/admin**', { timeout: 15000 });
+    console.log('✅ Login successful!');
     
     await page.waitForTimeout(2000);
     await page.screenshot({ path: 'test-results/e2e-04-admin-dashboard.png', fullPage: true });
