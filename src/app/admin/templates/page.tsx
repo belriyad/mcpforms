@@ -25,7 +25,7 @@ import { isFeatureEnabled } from '@/lib/feature-flags'
 interface Template {
   id: string
   name: string
-  status: 'processing' | 'ready' | 'error'
+  status: 'uploaded' | 'parsing' | 'parsed' | 'error'
   createdAt: any
   updatedAt: any
   fileSize?: number
@@ -144,9 +144,9 @@ export default function TemplatesPage() {
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Processing</p>
+                  <p className="text-sm text-gray-600 mb-1">Parsing</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {templates.filter(t => t.status === 'processing').length}
+                    {templates.filter(t => t.status === 'parsing').length}
                   </p>
                 </div>
                 <Clock className="w-8 h-8 text-yellow-600" />
@@ -156,9 +156,9 @@ export default function TemplatesPage() {
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Ready</p>
+                  <p className="text-sm text-gray-600 mb-1">Parsed</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {templates.filter(t => t.status === 'ready').length}
+                    {templates.filter(t => t.status === 'parsed').length}
                   </p>
                 </div>
                 <CheckCircle2 className="w-8 h-8 text-green-600" />
@@ -236,24 +236,24 @@ export default function TemplatesPage() {
                   All ({templates.length})
                 </button>
                 <button
-                  onClick={() => setFilter('ready')}
+                  onClick={() => setFilter('parsed')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                    filter === 'ready'
+                    filter === 'parsed'
                       ? 'bg-blue-100 text-blue-700 border border-blue-300'
                       : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  Ready ({templates.filter(t => t.status === 'ready').length})
+                  Parsed ({templates.filter(t => t.status === 'parsed').length})
                 </button>
                 <button
-                  onClick={() => setFilter('processing')}
+                  onClick={() => setFilter('parsing')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                    filter === 'processing'
+                    filter === 'parsing'
                       ? 'bg-blue-100 text-blue-700 border border-blue-300'
                       : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  Processing ({templates.filter(t => t.status === 'processing').length})
+                  Parsing ({templates.filter(t => t.status === 'parsing').length})
                 </button>
                 <button
                   onClick={() => setFilter('error')}
@@ -297,9 +297,9 @@ export default function TemplatesPage() {
                         <FileText className="w-6 h-6 text-blue-600" />
                       </div>
                       <StatusBadge
-                        variant={template.status === 'ready' ? 'success' : template.status === 'processing' ? 'warning' : 'error'}
+                        variant={template.status === 'parsed' ? 'success' : template.status === 'parsing' ? 'warning' : 'error'}
                       >
-                        {template.status === 'ready' ? 'Ready' : template.status === 'processing' ? 'Processing' : 'Error'}
+                        {template.status === 'parsed' ? 'Parsed' : template.status === 'parsing' ? 'Parsing' : template.status === 'uploaded' ? 'Uploaded' : 'Error'}
                       </StatusBadge>
                     </div>
                     
