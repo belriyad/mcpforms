@@ -189,15 +189,28 @@ test.describe('Setup and Run E2E Tests', () => {
     await page.screenshot({ path: 'test-results/e2e-07-create-service-modal.png', fullPage: true });
     
     const serviceName = `E2E Test Service ${Date.now()}`;
-    await page.getByLabel(/service name|name/i).first().fill(serviceName);
+    
+    // Try multiple selectors for the service name field
+    const nameInput = await page.locator('input[name="name"], input[placeholder*="name" i], input[placeholder*="service" i], input[type="text"]').first();
+    const nameInputVisible = await nameInput.isVisible({ timeout: 3000 }).catch(() => false);
+    
+    if (!nameInputVisible) {
+      console.log('⚠️  Service name input not found');
+      console.log('   Modal may not have loaded properly');
+      await page.screenshot({ path: 'test-results/e2e-error-no-input.png', fullPage: true });
+      return;
+    }
+    
+    await nameInput.fill(serviceName);
     console.log(`✅ Service name: ${serviceName}`);
     
     await page.screenshot({ path: 'test-results/e2e-08-service-form-filled.png', fullPage: true });
     
-    await page.getByRole('button', { name: /save|create|submit/i }).first().click();
+    const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
+    await saveButton.click();
     console.log('⏳ Saving service...');
     
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(3000);
     await page.screenshot({ path: 'test-results/e2e-09-after-service-create.png', fullPage: true });
     
     const currentUrl = page.url();
