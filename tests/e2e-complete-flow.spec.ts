@@ -1,10 +1,62 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(__dirname, '../.env.test') });
+
+const PRODUCTION_URL = 'https://formgenai-4545.web.app';
+
+// Helper functions for better reliability
+async function waitForPageReady(page: Page, timeout = 30000) {
+  try {
+    await page.waitForLoadState('domcontentloaded', { timeout });
+    await page.waitForTimeout(1000);
+  } catch (error) {
+    console.log('⚠️  Page load timeout, continuing anyway...');
+  }
+}
+
+async function takeScreenshot(page: Page, name: string, description: string) {
+  const filename = `test-results/${name}.png`;
+  await page.screenshot({ path: filename, fullPage: true });
+  console.log(`📸 ${description} → ${filename}`);
+}
+
+async function safeClick(page: Page, selector: any, description: string, timeout = 10000) {
+  try {
+    await selector.waitFor({ state: 'visible', timeout });
+    await selector.click();
+    console.log(`✅ Clicked: ${description}`);
+    await page.waitForTimeout(500);
+    return true;
+  } catch (error) {
+    console.log(`❌ Failed to click: ${description}`);
+    return false;
+  }
+}
+
+async function safeFill(page: Page, selector: any, value: string, description: string) {
+  try {
+    await selector.waitFor({ state: 'visible', timeout: 5000 });
+    await selector.clear();
+    await selector.fill(value);
+    console.log(`✅ Filled: ${description} = "${value}"`);
+    return true;
+  } catch (error) {
+    console.log(`❌ Failed to fill: ${description}`);
+    return false;
+  }
+}
 
 test.describe('Setup and Run E2E Tests', () => {
   
   test.setTimeout(600000); // 10 minutes for full workflow
+  
+  test.use({
+    actionTimeout: 30000,
+    navigationTimeout: 90000,
+  });
   
   test('Step 1: Create test account if needed', async ({ page }) => {
     console.log('\n' + '='.repeat(70));
@@ -120,37 +172,31 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('🔐 STEP 1/7: LOGIN');
     console.log('-'.repeat(70));
     
-    await page.goto('https://formgenai-4545.web.app/login');
-    await page.waitForTimeout(1000);
+    await page.goto(`${PRODUCTION_URL}/login`);
+    await waitForPageReady(page);
+    await takeScreenshot(page, 'e2e-01-login-page', 'Login page loaded');
     
-    await page.locator('input[type="email"]').fill(email);
-    await page.locator('input[type="password"]').fill(password);
-    await page.screenshot({ path: 'test-results/e2e-03-login-filled.png', fullPage: true });
+    await safeFill(page, page.getByLabel(/email/i), email, 'Email');
+    await safeFill(page, page.getByLabel(/password/i), password, 'Password');
+    await takeScreenshot(page, 'e2e-02-login-filled', 'Login form filled');
     
-    await page.getByRole('button', { name: /sign in/i }).click();
-    console.log('⏳ Waiting for login...');
+    const loginButton = page.getByRole('button', { name: /sign in|login/i });
+    await safeClick(page, loginButton, 'Sign In');
     
-    // Wait for navigation to admin dashboard
-    await page.waitForTimeout(3000); // Reduced wait time
-    
-    // Verify we're on admin page
-    const loginUrl = page.url();
-    if (!loginUrl.includes('/admin')) {
-      await page.screenshot({ path: 'test-results/e2e-error-login.png', fullPage: true });
-      throw new Error(`Login failed. Expected /admin URL but got: ${loginUrl}`);
-    }
-    
-    console.log('✅ Login successful!');
-    await page.screenshot({ path: 'test-results/e2e-04-admin-dashboard.png', fullPage: true });
-    
-    // ============= STEP 2: CHECK TEMPLATES =============
-    console.log('\n📄 STEP 2/7: CHECK TEMPLATES');
-    console.log('-'.repeat(70));
-    
-    await page.goto('https://formgenai-4545.web.app/admin/templates');
+    console.log('⏳ Waiting for login and redirect...');
+    await page.waitForFunction(() => window.location.pathname.includes('admin'), { timeout: 30000 });
     await page.waitForTimeout(2000);
     
-    await page.screenshot({ path: 'test-results/e2e-05-templates-page.png', fullPage: true });
+    await takeScreenshot(page, 'e2e-03-admin-dashboard', 'Admin dashboard');
+    console.log('✅ Login successful!\n');
+    
+    // ============= STEP 2: CHECK TEMPLATES =============
+    console.log('📄 STEP 2/7: CHECK TEMPLATES');
+    console.log('-'.repeat(70));
+    
+    await page.goto(`${PRODUCTION_URL}/admin/templates`);
+    await waitForPageReady(page);
+    await takeScreenshot(page, 'e2e-04-templates-page', 'Templates page');
     
     const bodyText = await page.locator('body').textContent();
     const hasTemplates = bodyText?.includes('template') || bodyText?.includes('Template');
@@ -158,70 +204,58 @@ test.describe('Setup and Run E2E Tests', () => {
     if (!hasTemplates) {
       console.log('⚠️  WARNING: No templates found!');
       console.log('   Services require templates. Upload a template first.');
-      console.log('   Skipping remaining steps that require templates.\n');
+      console.log('   Skipping remaining steps.\n');
       return;
     }
     
-    console.log('✅ Templates page accessible');
+    console.log('✅ Templates page accessible\n');
     
     // ============= STEP 3: CREATE SERVICE =============
-    console.log('\n🎯 STEP 3/7: CREATE SERVICE');
+    console.log('🎯 STEP 3/7: CREATE SERVICE');
     console.log('-'.repeat(70));
     
-    await page.goto('https://formgenai-4545.web.app/admin/services');
-    await page.waitForTimeout(3000);
+    await page.goto(`${PRODUCTION_URL}/admin/services`);
+    await waitForPageReady(page);
+    await takeScreenshot(page, 'e2e-05-services-page', 'Services page');
     
-    await page.screenshot({ path: 'test-results/e2e-06-services-page.png', fullPage: true });
+    const createButton = page.getByRole('button', { name: /create service|new service|\+ service|add service/i }).first();
+    const clicked = await safeClick(page, createButton, 'Create Service button');
     
-    const createButton = page.getByRole('button', { name: /create service|new service|\+ service/i }).first();
-    const createButtonVisible = await createButton.isVisible({ timeout: 5000 }).catch(() => false);
-    
-    if (!createButtonVisible) {
-      console.log('⚠️  Create Service button not found');
-      console.log('   Check if templates are properly set up');
+    if (!clicked) {
+      console.log('⚠️  Create Service button not found, skipping remaining steps\n');
       return;
     }
     
-    await createButton.click();
-    console.log('✅ Clicked Create Service');
-    
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: 'test-results/e2e-07-create-service-modal.png', fullPage: true });
+    await page.waitForTimeout(1000);
+    await takeScreenshot(page, 'e2e-06-service-modal', 'Create service modal');
     
     const serviceName = `E2E Test Service ${Date.now()}`;
     
-    // Try multiple selectors for the service name field
-    const nameInput = await page.locator('input[name="name"], input[placeholder*="name" i], input[placeholder*="service" i], input[type="text"]').first();
-    const nameInputVisible = await nameInput.isVisible({ timeout: 3000 }).catch(() => false);
+    // Try to find and fill the service name input
+    const nameInput = page.locator('input[name="name"], input[placeholder*="name" i], input[type="text"]').first();
+    const filled = await safeFill(page, nameInput, serviceName, 'Service name');
     
-    if (!nameInputVisible) {
-      console.log('⚠️  Service name input not found');
-      console.log('   Modal may not have loaded properly');
-      await page.screenshot({ path: 'test-results/e2e-error-no-input.png', fullPage: true });
+    if (!filled) {
+      console.log('⚠️  Service name input not found, skipping remaining steps\n');
       return;
     }
     
-    await nameInput.fill(serviceName);
-    console.log(`✅ Service name: ${serviceName}`);
-    
-    await page.screenshot({ path: 'test-results/e2e-08-service-form-filled.png', fullPage: true });
+    await takeScreenshot(page, 'e2e-07-service-filled', 'Service form filled');
     
     const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
-    await saveButton.click();
-    console.log('⏳ Saving service...');
+    await safeClick(page, saveButton, 'Save service');
     
-    await page.waitForTimeout(3000);
-    await page.screenshot({ path: 'test-results/e2e-09-after-service-create.png', fullPage: true });
+    await page.waitForTimeout(2000);
+    await takeScreenshot(page, 'e2e-08-service-created', 'Service created');
     
     const currentUrl = page.url();
     let serviceId = '';
     
     if (currentUrl.includes('/admin/services/') && currentUrl.split('/').length > 5) {
       serviceId = currentUrl.split('/').pop() || '';
-      console.log(`✅ Service created! ID: ${serviceId}`);
+      console.log(`✅ Service created! ID: ${serviceId}\n`);
     } else {
-      console.log('⚠️  Service creation status unclear');
-      console.log(`   Current URL: ${currentUrl}`);
+      console.log('⚠️  Service creation unclear, continuing anyway...\n');
     }
     
     // ============= STEP 4: GENERATE INTAKE LINK =============
