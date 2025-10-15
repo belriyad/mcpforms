@@ -43,6 +43,7 @@ const openai_1 = __importDefault(require("openai"));
 const mammoth_1 = __importDefault(require("mammoth"));
 const docx_1 = require("docx");
 const uuid_1 = require("uuid");
+const fieldNormalizer_1 = require("../utils/fieldNormalizer");
 const db = admin.firestore();
 const storage = admin.storage();
 // Lazy initialize OpenAI (only when actually used)
@@ -156,9 +157,18 @@ exports.documentGeneratorAI = {
             console.log(`🔍 [AI-GEN] Extracting template content...`);
             const templateContent = await this.extractTemplateContent(templateBuffer, template.fileType);
             console.log(`📝 [AI-GEN] Template content extracted (${templateContent.length} chars)`);
+            // Step 1.5: Normalize field names from camelCase to snake_case
+            // This fixes the mismatch between form field names (camelCase) and template expectations (snake_case)
+            const originalFieldNames = Object.keys(intake.clientData);
+            const normalizedClientData = (0, fieldNormalizer_1.normalizeFieldNames)(intake.clientData);
+            const normalizedFieldNames = Object.keys(normalizedClientData);
+            console.log(`🔄 [AI-GEN] Field normalization applied:`);
+            console.log(`   Original (camelCase): ${originalFieldNames.join(', ')}`);
+            console.log(`   Normalized (snake_case): ${normalizedFieldNames.join(', ')}`);
+            console.log(`   Total fields: ${normalizedFieldNames.length}`);
             // Step 2: Send to OpenAI for intelligent document generation
             console.log(`🤖 [AI-GEN] Sending to OpenAI for document generation...`);
-            const filledContent = await this.generateWithOpenAI(templateContent, intake.clientData, template);
+            const filledContent = await this.generateWithOpenAI(templateContent, normalizedClientData, template);
             console.log(`✅ [AI-GEN] OpenAI generated document (${filledContent.length} chars)`);
             // Step 3: Convert AI response to proper document format
             console.log(`📦 [AI-GEN] Converting to ${template.fileType} format...`);
