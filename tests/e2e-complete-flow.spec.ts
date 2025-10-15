@@ -130,11 +130,18 @@ test.describe('Setup and Run E2E Tests', () => {
     await page.getByRole('button', { name: /sign in/i }).click();
     console.log('⏳ Waiting for login...');
     
-    // Wait for navigation to admin dashboard (increased timeout)
-    await page.waitForURL('**/admin**', { timeout: 15000 });
-    console.log('✅ Login successful!');
-    
+    // Wait for navigation to admin dashboard
+    await page.waitForLoadState('networkidle', { timeout: 20000 });
     await page.waitForTimeout(2000);
+    
+    // Verify we're on admin page
+    const loginUrl = page.url();
+    if (!loginUrl.includes('/admin')) {
+      await page.screenshot({ path: 'test-results/e2e-error-login.png', fullPage: true });
+      throw new Error(`Login failed. Expected /admin URL but got: ${loginUrl}`);
+    }
+    
+    console.log('✅ Login successful!');
     await page.screenshot({ path: 'test-results/e2e-04-admin-dashboard.png', fullPage: true });
     
     // ============= STEP 2: CHECK TEMPLATES =============
