@@ -226,109 +226,101 @@ test.describe('Setup and Run E2E Tests', () => {
       return;
     }
     
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
+    
+    // Check what page we're on
+    const urlAfterCreate = page.url();
+    console.log(`📍 After clicking Create Service: ${urlAfterCreate}`);
+    
     await takeScreenshot(page, 'e2e-06-service-modal', 'Create service modal');
     
-    const serviceName = `E2E Test Service ${Date.now()}`;
+    // Debug: Check what's actually on the page
+    const pageText = await page.locator('body').textContent();
+    console.log(`📄 Page contains "Service Name": ${pageText?.includes('Service Name')}`);
     
-    // Try to find and fill the service name input
-    const nameInput = page.locator('input[name="name"], input[placeholder*="name" i], input[type="text"]').first();
-    const filled = await safeFill(page, nameInput, serviceName, 'Service name');
+    // Debug: Print all buttons on the page
+    const allButtons = await page.locator('button').all();
+    console.log(`🔍 Total buttons on page: ${allButtons.length}`);
+    for (let i = 0; i < Math.min(allButtons.length, 5); i++) {
+      const text = await allButtons[i].textContent();
+      const visible = await allButtons[i].isVisible();
+      console.log(`  Button ${i+1}: "${text?.trim()}" (visible: ${visible})`);
+    }
+    
+    // Check for all forms on the page
+    const forms = await page.locator('form').all();
+    console.log(`🔍 Total forms on page: ${forms.length}`);
+    
+    // Check for the input field with multiple selectors
+    const serviceNameById = page.locator('#serviceName').first();
+    const serviceNameByPlaceholder = page.locator('input[placeholder*="service name" i]').first();
+    const serviceNameByName = page.locator('input[name*="name" i]').first();
+    const anyInput = page.locator('input[type="text"]').first();
+    
+    console.log(`🔍 #serviceName visible: ${await serviceNameById.isVisible().catch(() => false)}`);
+    console.log(`🔍 input[placeholder*="service name"] visible: ${await serviceNameByPlaceholder.isVisible().catch(() => false)}`);
+    console.log(`🔍 input[name*="name"] visible: ${await serviceNameByName.isVisible().catch(() => false)}`);
+    console.log(`🔍 Any text input visible: ${await anyInput.isVisible().catch(() => false)}`);
+    
+    const serviceName = `E2E Test Service ${Date.now()}`;
+    console.log(`📝 Service name: ${serviceName}`);
+    
+    // Try the input field that's actually visible
+    let filled = false;
+    if (await serviceNameById.isVisible().catch(() => false)) {
+      filled = await safeFill(page, serviceNameById, serviceName, 'Service Name (#serviceName)');
+    } else if (await serviceNameByPlaceholder.isVisible().catch(() => false)) {
+      filled = await safeFill(page, serviceNameByPlaceholder, serviceName, 'Service Name (placeholder)');
+    } else if (await anyInput.isVisible().catch(() => false)) {
+      filled = await safeFill(page, anyInput, serviceName, 'Service Name (any input)');
+    }
     
     if (!filled) {
-      console.log('⚠️  Service name input not found, skipping remaining steps\n');
+      console.log('⚠️  Could not fill service name - taking debug screenshot');
+      await takeScreenshot(page, 'e2e-07-service-fill-failed', 'Service name fill failed');
+      console.log('⚠️  Skipping remaining steps\n');
       return;
     }
     
     await takeScreenshot(page, 'e2e-07-service-filled', 'Service form filled');
     
-    // Try to click save button with multiple attempts
-    const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
-    let saveClicked = await safeClick(page, saveButton, 'Save service');
+    // Debug: Check for save button
+    const saveByRole = page.getByRole('button', { name: /save|create/i }).first();
+    const saveByText = page.locator('button:has-text("Save"), button:has-text("Create")').first();
+    const anyButton = page.locator('button[type="submit"]').first();
     
-    // If normal click failed, try force click
-    if (!saveClicked) {
-      console.log('   Attempting force click...');
-      try {
-        await saveButton.click({ force: true, timeout: 5000 });
-        console.log('✅ Force clicked Save button');
-        saveClicked = true;
-      } catch (e) {
-        console.log('❌ Force click also failed');
-      }
+    console.log(`🔍 Save button by role visible: ${await saveByRole.isVisible().catch(() => false)}`);
+    console.log(`🔍 Save button by text visible: ${await saveByText.isVisible().catch(() => false)}`);
+    console.log(`🔍 Submit button visible: ${await anyButton.isVisible().catch(() => false)}`);
+    
+    // Try to click whatever button is available
+    let saveClicked = false;
+    if (await saveByRole.isVisible().catch(() => false)) {
+      saveClicked = await safeClick(page, saveByRole, 'Save/Create button (role)');
+    } else if (await saveByText.isVisible().catch(() => false)) {
+      saveClicked = await safeClick(page, saveByText, 'Save/Create button (text)');
+    } else if (await anyButton.isVisible().catch(() => false)) {
+      saveClicked = await safeClick(page, anyButton, 'Submit button');
     }
     
-    // Try pressing Enter as alternative
     if (!saveClicked) {
-      console.log('   Trying Enter key...');
-      try {
-        await page.keyboard.press('Enter');
-        console.log('✅ Pressed Enter to submit');
-        saveClicked = true;
-      } catch (e) {
-        console.log('❌ Enter key failed');
-      }
+      console.log('⚠️  Could not click save button - trying Enter key');
+      await page.keyboard.press('Enter');
     }
     
-    console.log('⏳ Waiting for service creation...');
-    await page.waitForTimeout(4000); // Increased wait time
-    await takeScreenshot(page, 'e2e-08-service-created', 'After save clicked');
+    // Click save and wait for redirect
+    console.log('⏳ Waiting for service to be created...');
+    await page.waitForTimeout(3000);
     
-    let serviceId = '';
+    // Wait for redirect to service detail page (this is the key!)
+    await page.waitForURL(/\/admin\/services\/[^/]+$/, { timeout: 10000 });
+    await takeScreenshot(page, 'e2e-08-service-created', 'Service created');
+    
+    // Extract service ID from URL (like the working test)
     const currentUrl = page.url();
-    console.log(`   Current URL: ${currentUrl}`);
-    
-    // Try multiple methods to get service ID
-    
-    // Method 1: Extract from URL if redirected to service detail page
-    if (currentUrl.includes('/admin/services/')) {
-      const urlParts = currentUrl.split('/');
-      const lastPart = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
-      if (lastPart && lastPart !== 'services' && lastPart.length > 5) {
-        serviceId = lastPart;
-        console.log(`✅ Service ID from URL: ${serviceId}`);
-      }
-    }
-    
-    // Method 2: If not in URL, go to services list and find the newly created service
-    if (!serviceId) {
-      console.log('   Service ID not in URL, checking services list...');
-      await page.goto(`${PRODUCTION_URL}/admin/services`);
-      await waitForPageReady(page);
-      
-      // Look for service with our name
-      const serviceCard = page.locator(`text="${serviceName}"`).first();
-      const serviceVisible = await serviceCard.isVisible({ timeout: 5000 }).catch(() => false);
-      
-      if (serviceVisible) {
-        // Find the link/button containing the service name
-        const parentLink = page.locator(`[href*="/admin/services/"]:has-text("${serviceName}")`).first();
-        const linkVisible = await parentLink.isVisible({ timeout: 3000 }).catch(() => false);
-        
-        if (linkVisible) {
-          const href = await parentLink.getAttribute('href');
-          if (href) {
-            serviceId = href.split('/').pop()?.split('?')[0] || '';
-            console.log(`✅ Service ID from list: ${serviceId}`);
-          }
-        }
-      }
-    }
-    
-    // Method 3: Get first service from the list (fallback)
-    if (!serviceId) {
-      console.log('   Service not found by name, getting first service from list...');
-      const firstServiceLink = page.locator('[href*="/admin/services/"]').first();
-      const firstLinkVisible = await firstServiceLink.isVisible({ timeout: 3000 }).catch(() => false);
-      
-      if (firstLinkVisible) {
-        const href = await firstServiceLink.getAttribute('href');
-        if (href) {
-          serviceId = href.split('/').pop()?.split('?')[0] || '';
-          console.log(`✅ Service ID from first service: ${serviceId}`);
-        }
-      }
-    }
+    const serviceId = currentUrl.match(/\/services\/([^/]+)/)?.[1];
+    console.log(`📍 Current URL: ${currentUrl}`);
+    console.log(`🆔 Service ID: ${serviceId || 'N/A'}`);
     
     if (serviceId) {
       console.log(`✅ Service created! ID: ${serviceId}\n`);
@@ -345,9 +337,9 @@ test.describe('Setup and Run E2E Tests', () => {
       return;
     }
     
-    // Navigate back to service detail page
-    await page.goto(`https://formgenai-4545.web.app/admin/services/${serviceId}`);
+    // We're already on the service detail page after creation
     await page.waitForTimeout(2000);
+    await takeScreenshot(page, 'e2e-09-service-detail', 'Service detail page');
     
     // Look for generate/create intake button
     const generateButton = page.getByRole('button', { name: /generate|create.*intake|new.*intake|add.*intake/i }).first();
