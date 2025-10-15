@@ -311,58 +311,151 @@ test.describe('E2E Simplified Test', () => {
     
     await page.goto(intakeUrl)
     await waitForPageReady(page)
+    
+    // Wait longer for React to hydrate and form to render
+    console.log('⏳ Waiting for form to fully load...')
+    await page.waitForTimeout(5000)
+    
     await takeScreenshot(page, 'simplified-09-intake-form', 'Intake form loaded')
     
     // Fill common fields (adapt based on your template fields)
     console.log('📋 Filling intake form fields...')
     
-    // Look for input fields and fill them
-    const textInputs = await page.locator('input[type="text"], input[type="email"], input:not([type])').all()
-    console.log(`   Found ${textInputs.length} text inputs`)
+    // Wait for any input to be visible (form has loaded)
+    try {
+      await page.waitForSelector('input, textarea, select', { timeout: 10000 })
+      console.log('✅ Form elements detected')
+    } catch (e) {
+      console.log('⚠️  No form elements found - intake may be already submitted or form not loaded')
+      await takeScreenshot(page, 'simplified-09b-no-form', 'No form elements')
+    }
     
-    for (let i = 0; i < Math.min(textInputs.length, 10); i++) {
-      const input = textInputs[i]
-      const isVisible = await input.isVisible().catch(() => false)
-      if (!isVisible) continue
-      
-      const placeholder = await input.getAttribute('placeholder').catch(() => '')
-      const name = await input.getAttribute('name').catch(() => '')
-      const label = name || placeholder || `Field ${i + 1}`
-      
-      // Fill with sample data
-      let value = 'Test Value'
-      if (label.toLowerCase().includes('email')) {
-        value = 'test@example.com'
-      } else if (label.toLowerCase().includes('name')) {
-        value = 'John Doe'
-      } else if (label.toLowerCase().includes('phone')) {
-        value = '555-123-4567'
-      } else if (label.toLowerCase().includes('address')) {
-        value = '123 Main St, City, State 12345'
-      } else if (label.toLowerCase().includes('date')) {
-        value = '2025-10-15'
-      }
+    // Get all form fields
+    const allInputs = await page.locator('input:not([type="hidden"]):not([type="button"]):not([type="submit"]), textarea, select').all()
+    console.log(`   Found ${allInputs.length} form fields (input, textarea, select)`)
+    
+    let filledCount = 0
+    
+    for (let i = 0; i < allInputs.length; i++) {
+      const field = allInputs[i]
       
       try {
-        await input.fill(value)
-        console.log(`   ✅ Filled: ${label} = "${value}"`)
+        const isVisible = await field.isVisible().catch(() => false)
+        if (!isVisible) continue
+        
+        const tagName = await field.evaluate(el => el.tagName.toLowerCase())
+        const type = await field.getAttribute('type').catch(() => 'text')
+        const placeholder = await field.getAttribute('placeholder').catch(() => '')
+        const name = await field.getAttribute('name').catch(() => '')
+        const id = await field.getAttribute('id').catch(() => '')
+        const ariaLabel = await field.getAttribute('aria-label').catch(() => '')
+        
+        // Build a label from available attributes
+        const label = ariaLabel || name || id || placeholder || `Field ${i + 1}`
+        const lowerLabel = label.toLowerCase()
+        
+        console.log(`   📝 Field ${i + 1}: ${tagName} [${type}] - "${label}"`)
+        
+        // Determine appropriate value
+        let value = ''
+        
+        if (tagName === 'select') {
+          // For select elements, choose first option
+          const options = await field.locator('option').all()
+          if (options.length > 1) {
+            const firstValue = await options[1].getAttribute('value')
+            if (firstValue) {
+              await field.selectOption(firstValue)
+              console.log(`      ✅ Selected option: ${firstValue}`)
+              filledCount++
+            }
+          }
+          continue
+        }
+        
+        // Smart value assignment based on field name/label
+        if (type === 'email' || lowerLabel.includes('email')) {
+          value = 'test@example.com'
+        } else if (type === 'tel' || lowerLabel.includes('phone') || lowerLabel.includes('tel')) {
+          value = '555-123-4567'
+        } else if (type === 'number' || lowerLabel.includes('age') || lowerLabel.includes('year')) {
+          value = '25'
+        } else if (type === 'date' || lowerLabel.includes('date')) {
+          value = '2025-10-15'
+        } else if (lowerLabel.includes('name') && !lowerLabel.includes('user') && !lowerLabel.includes('account')) {
+          if (lowerLabel.includes('first')) {
+            value = 'John'
+          } else if (lowerLabel.includes('last') || lowerLabel.includes('sur')) {
+            value = 'Doe'
+          } else if (lowerLabel.includes('full') || lowerLabel.includes('grantor') || lowerLabel.includes('trust')) {
+            value = 'John Doe'
+          } else {
+            value = 'John Doe'
+          }
+        } else if (lowerLabel.includes('address') || lowerLabel.includes('street')) {
+          value = '123 Main Street'
+        } else if (lowerLabel.includes('city')) {
+          value = 'Los Angeles'
+        } else if (lowerLabel.includes('state')) {
+          value = 'CA'
+        } else if (lowerLabel.includes('zip') || lowerLabel.includes('postal')) {
+          value = '90210'
+        } else if (lowerLabel.includes('county')) {
+          value = 'Los Angeles County'
+        } else if (tagName === 'textarea' || lowerLabel.includes('description') || lowerLabel.includes('notes')) {
+          value = 'This is a test submission from the automated E2E test. Generated on October 15, 2025.'
+        } else {
+          // Default value for unknown fields
+          value = 'Test Value'
+        }
+        
+        await field.fill(value)
+        console.log(`      ✅ Filled with: "${value}"`)
+        filledCount++
+        
       } catch (err) {
-        console.log(`   ⚠️  Could not fill: ${label}`)
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        console.log(`      ⚠️  Could not fill this field: ${errorMsg}`)
       }
     }
     
+    console.log(`\n✅ Filled ${filledCount} out of ${allInputs.length} form fields`)
     await takeScreenshot(page, 'simplified-10-intake-filled', 'Intake form filled')
     
     // Submit the form
-    const submitButton = page.getByRole('button', { name: /submit|send|complete/i }).first()
+    console.log('\n📤 Looking for submit button...')
+    await page.waitForTimeout(1000)
+    
+    const submitButton = page.getByRole('button', { name: /submit|send|complete|continue/i }).first()
     if (await submitButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-      console.log('✅ Clicking Submit button...')
+      console.log('✅ Found submit button, clicking...')
       await submitButton.click()
-      await page.waitForTimeout(3000)
+      console.log('⏳ Waiting for submission to complete...')
+      await page.waitForTimeout(5000)
       await takeScreenshot(page, 'simplified-11-intake-submitted', 'After submission')
-      console.log('✅ Intake form submitted successfully!')
+      
+      // Check for success message or redirect
+      const currentUrl = page.url()
+      const hasSuccessMessage = await page.locator('text=/success|thank you|submitted|complete/i').count()
+      
+      if (hasSuccessMessage > 0 || !currentUrl.includes(intakeUrl)) {
+        console.log('✅ Intake form submitted successfully!')
+      } else {
+        console.log('⚠️  Submission status unclear - check screenshot')
+      }
     } else {
       console.log('⚠️  Submit button not found')
+      console.log('   Form may require all fields or has validation errors')
+      
+      // Check for validation errors
+      const errors = await page.locator('[class*="error"], [role="alert"], .text-red-500, .text-red-600').all()
+      if (errors.length > 0) {
+        console.log(`   ⚠️  Found ${errors.length} potential error messages`)
+        for (const error of errors.slice(0, 3)) {
+          const text = await error.textContent().catch(() => '')
+          if (text) console.log(`      - ${text.trim()}`)
+        }
+      }
     }
     
     // ============= STEP 5: GENERATE DOCUMENTS =============
@@ -372,46 +465,133 @@ test.describe('E2E Simplified Test', () => {
     // Go back to admin to approve and generate
     await page.goto(`${PRODUCTION_URL}/admin/services/${serviceId}`)
     await waitForPageReady(page)
+    await page.waitForTimeout(3000)
     await takeScreenshot(page, 'simplified-12-back-to-service', 'Back to service page')
     
     // Look for intakes section or submissions
     console.log('🔍 Looking for submitted intake...')
-    await page.waitForTimeout(2000)
     
-    // Try to find and click on the intake to view it
-    const intakeItem = page.locator('text=/submission|intake|test client/i').first()
-    if (await intakeItem.isVisible({ timeout: 5000 }).catch(() => false)) {
-      console.log('✅ Found intake submission')
-      await intakeItem.click()
-      await page.waitForTimeout(2000)
-      await takeScreenshot(page, 'simplified-13-intake-detail', 'Intake detail')
+    // Try multiple selectors to find the intake submission
+    const intakeSelectors = [
+      'text=/submission|intake/i',
+      '[class*="intake"]',
+      'a[href*="/intakes/"]',
+      'button:has-text("View")',
+      'div:has-text("Test Client")'
+    ]
+    
+    let intakeFound = false
+    for (const selector of intakeSelectors) {
+      const element = page.locator(selector).first()
+      if (await element.isVisible({ timeout: 3000 }).catch(() => false)) {
+        console.log(`✅ Found intake using selector: ${selector}`)
+        
+        // If it's clickable (link or button), click it
+        const tagName = await element.evaluate(el => el.tagName.toLowerCase()).catch(() => '')
+        if (tagName === 'a' || tagName === 'button') {
+          await element.click()
+          await page.waitForTimeout(2000)
+          await takeScreenshot(page, 'simplified-13-intake-detail', 'Intake detail')
+          intakeFound = true
+          break
+        } else {
+          intakeFound = true
+        }
+      }
     }
     
-    // Look for "Generate Documents" or "Generate" button
-    const generateDocsBtn = page.getByRole('button', { name: /generate document|generate|create document/i }).first()
-    if (await generateDocsBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      console.log('🔘 Clicking Generate Documents button...')
-      await generateDocsBtn.click()
-      await page.waitForTimeout(5000) // Document generation may take time
-      await takeScreenshot(page, 'simplified-14-generating-docs', 'Generating documents')
-      console.log('✅ Document generation started!')
+    if (intakeFound) {
+      console.log('✅ Intake submission located')
     } else {
-      console.log('⚠️  Generate Documents button not found')
+      console.log('⚠️  Intake submission not immediately visible')
+      console.log('   It may still be processing or in a different tab/section')
+    }
+    
+    // Look for "Generate Documents" button with multiple attempts
+    console.log('\n🔍 Looking for Generate Documents button...')
+    await page.waitForTimeout(2000)
+    
+    // Take a screenshot to see what's available
+    await takeScreenshot(page, 'simplified-13b-before-generate', 'Before document generation')
+    
+    // Try multiple button selectors
+    const generateButtonSelectors = [
+      'button:has-text("Generate Documents")',
+      'button:has-text("Generate Document")',
+      'button:has-text("Generate")',
+      'button:has-text("Create Documents")',
+      'button:has-text("Create Document")',
+      '[role="button"]:has-text("Generate")',
+      'a:has-text("Generate")'
+    ]
+    
+    let generateClicked = false
+    for (const selector of generateButtonSelectors) {
+      const button = page.locator(selector).first()
+      if (await button.isVisible({ timeout: 2000 }).catch(() => false)) {
+        const isDisabled = await button.isDisabled().catch(() => false)
+        console.log(`✅ Found button with selector: ${selector} (disabled: ${isDisabled})`)
+        
+        if (!isDisabled) {
+          console.log('🔘 Clicking Generate Documents button...')
+          await button.click()
+          generateClicked = true
+          console.log('⏳ Waiting for document generation to start...')
+          await page.waitForTimeout(7000) // Give it time to process
+          await takeScreenshot(page, 'simplified-14-generating-docs', 'Document generation initiated')
+          break
+        } else {
+          console.log('   ⚠️  Button is disabled - may need intake approval first')
+        }
+      }
+    }
+    
+    if (!generateClicked) {
+      console.log('⚠️  Generate Documents button not found or not clickable')
+      console.log('   Possible reasons:')
+      console.log('   - Intake requires manual approval first')
+      console.log('   - Button has different text or is in a different location')
+      console.log('   - Documents may auto-generate on submission')
       console.log('   Checking for existing documents...')
     }
     
-    // Wait a bit for generation to complete
+    // Wait a bit more for generation to complete
     await page.waitForTimeout(5000)
-    await takeScreenshot(page, 'simplified-15-docs-generated', 'Documents generated')
+    await takeScreenshot(page, 'simplified-15-docs-check', 'Checking for documents')
     
-    // Look for download links or success message
-    const downloadLinks = await page.locator('[href*="download"], a:has-text("Download")').count()
-    if (downloadLinks > 0) {
-      console.log(`✅ Found ${downloadLinks} document download link(s)`)
-      console.log('✅ Documents generated successfully!')
+    // Look for download links, document cards, or success messages
+    console.log('\n🔍 Checking for generated documents...')
+    
+    const documentIndicators = await page.locator([
+      '[href*="download"]',
+      'a:has-text("Download")',
+      '[class*="document"]',
+      'text=/document.*generated|documents.*ready/i',
+      '.docx, .pdf'
+    ].join(', ')).all()
+    
+    console.log(`   Found ${documentIndicators.length} potential document indicators`)
+    
+    if (documentIndicators.length > 0) {
+      console.log('✅ Documents appear to be generated!')
+      
+      // Try to get document names
+      for (let i = 0; i < Math.min(documentIndicators.length, 5); i++) {
+        const text = await documentIndicators[i].textContent().catch(() => '')
+        const href = await documentIndicators[i].getAttribute('href').catch(() => '')
+        if (text || href) {
+          console.log(`   📄 Document ${i + 1}: ${text || href}`)
+        }
+      }
     } else {
-      console.log('⚠️  No download links visible yet - documents may still be processing')
+      console.log('⚠️  No obvious document indicators found')
+      console.log('   Documents may be:')
+      console.log('   - Still generating (can take 30-60 seconds)')
+      console.log('   - Located in a different section/tab')
+      console.log('   - Require additional manual steps')
     }
+    
+    await takeScreenshot(page, 'simplified-16-final-state', 'Final test state')
     
     console.log('\n' + '='.repeat(70))
     console.log('🎉 COMPLETE E2E WORKFLOW TEST FINISHED!')
@@ -421,8 +601,15 @@ test.describe('E2E Simplified Test', () => {
     console.log('✅ Login successful')
     console.log('✅ Service created with template')
     console.log('✅ Intake link generated')
-    console.log('✅ Intake form filled and submitted')
-    console.log('✅ Documents generation initiated')
+    console.log(`${filledCount > 0 ? '✅' : '⚠️'} Intake form filled (${filledCount} fields)`)
+    console.log(`${filledCount > 0 ? '✅' : '⚠️'} Intake form submitted`)
+    console.log(`${generateClicked ? '✅' : '⚠️'} Document generation ${generateClicked ? 'initiated' : 'attempted'}`)
+    console.log(`${documentIndicators.length > 0 ? '✅' : '⚠️'} Documents ${documentIndicators.length > 0 ? 'detected' : 'pending'}`)
+    console.log('')
+    console.log('📊 Test Metrics:')
+    console.log(`   Service ID: ${serviceId}`)
+    console.log(`   Form fields filled: ${filledCount}`)
+    console.log(`   Document indicators: ${documentIndicators.length}`)
     console.log('')
   })
 })
