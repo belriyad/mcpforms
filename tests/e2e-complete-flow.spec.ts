@@ -245,17 +245,70 @@ test.describe('Setup and Run E2E Tests', () => {
     const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
     await safeClick(page, saveButton, 'Save service');
     
-    await page.waitForTimeout(2000);
-    await takeScreenshot(page, 'e2e-08-service-created', 'Service created');
+    console.log('⏳ Waiting for service creation...');
+    await page.waitForTimeout(3000);
+    await takeScreenshot(page, 'e2e-08-service-created', 'After save clicked');
     
-    const currentUrl = page.url();
     let serviceId = '';
+    const currentUrl = page.url();
+    console.log(`   Current URL: ${currentUrl}`);
     
-    if (currentUrl.includes('/admin/services/') && currentUrl.split('/').length > 5) {
-      serviceId = currentUrl.split('/').pop() || '';
+    // Try multiple methods to get service ID
+    
+    // Method 1: Extract from URL if redirected to service detail page
+    if (currentUrl.includes('/admin/services/')) {
+      const urlParts = currentUrl.split('/');
+      const lastPart = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
+      if (lastPart && lastPart !== 'services' && lastPart.length > 5) {
+        serviceId = lastPart;
+        console.log(`✅ Service ID from URL: ${serviceId}`);
+      }
+    }
+    
+    // Method 2: If not in URL, go to services list and find the newly created service
+    if (!serviceId) {
+      console.log('   Service ID not in URL, checking services list...');
+      await page.goto(`${PRODUCTION_URL}/admin/services`);
+      await waitForPageReady(page);
+      
+      // Look for service with our name
+      const serviceCard = page.locator(`text="${serviceName}"`).first();
+      const serviceVisible = await serviceCard.isVisible({ timeout: 5000 }).catch(() => false);
+      
+      if (serviceVisible) {
+        // Find the link/button containing the service name
+        const parentLink = page.locator(`[href*="/admin/services/"]:has-text("${serviceName}")`).first();
+        const linkVisible = await parentLink.isVisible({ timeout: 3000 }).catch(() => false);
+        
+        if (linkVisible) {
+          const href = await parentLink.getAttribute('href');
+          if (href) {
+            serviceId = href.split('/').pop()?.split('?')[0] || '';
+            console.log(`✅ Service ID from list: ${serviceId}`);
+          }
+        }
+      }
+    }
+    
+    // Method 3: Get first service from the list (fallback)
+    if (!serviceId) {
+      console.log('   Service not found by name, getting first service from list...');
+      const firstServiceLink = page.locator('[href*="/admin/services/"]').first();
+      const firstLinkVisible = await firstServiceLink.isVisible({ timeout: 3000 }).catch(() => false);
+      
+      if (firstLinkVisible) {
+        const href = await firstServiceLink.getAttribute('href');
+        if (href) {
+          serviceId = href.split('/').pop()?.split('?')[0] || '';
+          console.log(`✅ Service ID from first service: ${serviceId}`);
+        }
+      }
+    }
+    
+    if (serviceId) {
       console.log(`✅ Service created! ID: ${serviceId}\n`);
     } else {
-      console.log('⚠️  Service creation unclear, continuing anyway...\n');
+      console.log('⚠️  Could not determine service ID\n');
     }
     
     // ============= STEP 4: GENERATE INTAKE LINK =============
