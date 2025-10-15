@@ -131,8 +131,7 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('⏳ Waiting for login...');
     
     // Wait for navigation to admin dashboard
-    await page.waitForLoadState('networkidle', { timeout: 20000 });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(5000); // Give time for redirect and initial load
     
     // Verify we're on admin page
     const loginUrl = page.url();
