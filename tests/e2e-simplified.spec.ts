@@ -269,40 +269,107 @@ test.describe('E2E Simplified Test', () => {
     console.log('-'.repeat(70))
     
     await page.goto(`${PRODUCTION_URL}/admin/services/${serviceId}`)
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(3000)
     await takeScreenshot(page, 'simplified-07-service-detail', 'Service detail page')
     
-    // Look for "Generate Intake" or "Send Intake" button
+    // Look for "Generate Intake" or "Send Intake" button with multiple strategies
     let intakeUrl = ''
-    const generateIntakeBtn = page.getByRole('button', { name: /generate intake|send intake|create intake/i }).first()
+    console.log('🔍 Looking for intake generation button...')
     
-    if (await generateIntakeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      console.log('🔘 Clicking Generate Intake button...')
-      await generateIntakeBtn.click()
-      await page.waitForTimeout(3000)
-      await takeScreenshot(page, 'simplified-08-after-generate', 'After generate intake')
+    const buttonSelectors = [
+      'button:has-text("Send Intake")',
+      'button:has-text("Generate Intake")',
+      'button:has-text("Create Intake")',
+      'button:has-text("Send")',
+      '[role="button"]:has-text("Send")',
+      'a:has-text("Send Intake")'
+    ]
+    
+    let intakeGenerated = false
+    for (const selector of buttonSelectors) {
+      const btn = page.locator(selector).first()
+      if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        const isDisabled = await btn.isDisabled().catch(() => false)
+        console.log(`✅ Found button: ${selector} (disabled: ${isDisabled})`)
+        
+        if (!isDisabled) {
+          console.log('🔘 Clicking to generate/send intake...')
+          await btn.click()
+          await page.waitForTimeout(5000) // Wait longer for generation
+          await takeScreenshot(page, 'simplified-08-after-generate', 'After generate intake')
+          intakeGenerated = true
+          break
+        }
+      }
     }
     
-    // Look for intake link
-    const intakeLinkElement = page.locator('[href*="/intake/"]').first()
-    if (await intakeLinkElement.isVisible({ timeout: 10000 }).catch(() => false)) {
+    if (!intakeGenerated) {
+      console.log('⚠️  No generate button found - intake might already exist')
+    }
+    
+    // Look for intake link with improved detection
+    console.log('🔍 Looking for intake link...')
+    
+    // Strategy 1: Look for visible link elements
+    const intakeLinkElement = page.locator('a[href*="/intake/"]').first()
+    if (await intakeLinkElement.isVisible({ timeout: 5000 }).catch(() => false)) {
       const intakeHref = await intakeLinkElement.getAttribute('href')
-      if (intakeHref) {
+      if (intakeHref && !intakeHref.endsWith('/intake/intake')) {
         intakeUrl = intakeHref.startsWith('http') ? intakeHref : `${PRODUCTION_URL}${intakeHref}`
-        console.log(`✅ Intake link found: ${intakeUrl}`)
+        console.log(`✅ Intake link found (visible element): ${intakeUrl}`)
       }
-    } else {
-      console.log('⚠️  No intake link visible - checking page content...')
+    }
+    
+    // Strategy 2: Check page content for valid intake tokens (must be longer than "intake")
+    if (!intakeUrl) {
+      console.log('🔍 Checking page content for intake token...')
       const pageContent = await page.content()
-      const tokenMatch = pageContent.match(/\/intake\/([a-zA-Z0-9-]+)/)
-      if (tokenMatch) {
-        intakeUrl = `${PRODUCTION_URL}/intake/${tokenMatch[1]}`
-        console.log(`✅ Found intake token in page: ${intakeUrl}`)
+      
+      // Look for intake URLs with proper tokens (alphanumeric, at least 10 chars)
+      const tokenMatches = pageContent.match(/\/intake\/([a-zA-Z0-9_-]{10,})/g)
+      
+      if (tokenMatches && tokenMatches.length > 0) {
+        // Get the first valid token
+        const firstToken = tokenMatches[0]
+        intakeUrl = `${PRODUCTION_URL}${firstToken}`
+        console.log(`✅ Found intake token in HTML: ${intakeUrl}`)
       } else {
-        console.log('❌ Could not find intake link')
-        console.log('⚠️  Test stopping - cannot proceed without intake link')
-        return
+        // Fallback: look for any intake path but exclude generic "intake"
+        const anyMatch = pageContent.match(/\/intake\/([a-zA-Z0-9_-]+)/)
+        if (anyMatch && anyMatch[1] !== 'intake' && anyMatch[1].length > 5) {
+          intakeUrl = `${PRODUCTION_URL}/intake/${anyMatch[1]}`
+          console.log(`✅ Found intake token (fallback): ${intakeUrl}`)
+        }
       }
+    }
+    
+    // Strategy 3: Check input fields that might contain the intake URL
+    if (!intakeUrl) {
+      console.log('🔍 Checking input fields for intake URL...')
+      const inputs = await page.locator('input[value*="/intake/"], textarea').all()
+      for (const input of inputs) {
+        const value = await input.inputValue().catch(() => '')
+        if (value.includes('/intake/') && !value.endsWith('/intake/intake')) {
+          const match = value.match(/\/intake\/([a-zA-Z0-9_-]{10,})/)
+          if (match) {
+            intakeUrl = value.startsWith('http') ? value : `${PRODUCTION_URL}${match[0]}`
+            console.log(`✅ Found intake URL in input field: ${intakeUrl}`)
+            break
+          }
+        }
+      }
+    }
+    
+    if (!intakeUrl) {
+      console.log('❌ Could not find valid intake link')
+      console.log('   Tried:')
+      console.log('   - Visible link elements')
+      console.log('   - Page HTML content')
+      console.log('   - Input/textarea values')
+      console.log('⚠️  Service may need manual intake generation')
+      console.log('⚠️  Test stopping - cannot proceed without intake link')
+      await takeScreenshot(page, 'simplified-08-no-intake-link', 'No intake link found')
+      return
     }
     
     // ============= STEP 4: FILL INTAKE FORM =============
