@@ -121,7 +121,7 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('-'.repeat(70));
     
     await page.goto('https://formgenai-4545.web.app/login');
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1000);
     
     await page.locator('input[type="email"]').fill(email);
     await page.locator('input[type="password"]').fill(password);
@@ -131,7 +131,7 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('⏳ Waiting for login...');
     
     // Wait for navigation to admin dashboard
-    await page.waitForTimeout(5000); // Give time for redirect and initial load
+    await page.waitForTimeout(3000); // Reduced wait time
     
     // Verify we're on admin page
     const loginUrl = page.url();
@@ -148,7 +148,7 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('-'.repeat(70));
     
     await page.goto('https://formgenai-4545.web.app/admin/templates');
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(2000);
     
     await page.screenshot({ path: 'test-results/e2e-05-templates-page.png', fullPage: true });
     
