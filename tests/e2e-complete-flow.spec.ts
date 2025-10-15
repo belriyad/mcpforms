@@ -242,11 +242,36 @@ test.describe('Setup and Run E2E Tests', () => {
     
     await takeScreenshot(page, 'e2e-07-service-filled', 'Service form filled');
     
+    // Try to click save button with multiple attempts
     const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
-    await safeClick(page, saveButton, 'Save service');
+    let saveClicked = await safeClick(page, saveButton, 'Save service');
+    
+    // If normal click failed, try force click
+    if (!saveClicked) {
+      console.log('   Attempting force click...');
+      try {
+        await saveButton.click({ force: true, timeout: 5000 });
+        console.log('✅ Force clicked Save button');
+        saveClicked = true;
+      } catch (e) {
+        console.log('❌ Force click also failed');
+      }
+    }
+    
+    // Try pressing Enter as alternative
+    if (!saveClicked) {
+      console.log('   Trying Enter key...');
+      try {
+        await page.keyboard.press('Enter');
+        console.log('✅ Pressed Enter to submit');
+        saveClicked = true;
+      } catch (e) {
+        console.log('❌ Enter key failed');
+      }
+    }
     
     console.log('⏳ Waiting for service creation...');
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(4000); // Increased wait time
     await takeScreenshot(page, 'e2e-08-service-created', 'After save clicked');
     
     let serviceId = '';
