@@ -65,8 +65,8 @@ test.describe('Core Scenarios - Complete E2E Tests', () => {
     const useExistingAccount = true; // Set to false to test signup flow
     
     const testUser = useExistingAccount ? {
-      email: process.env.TEST_USER_EMAIL || 'rubazayed@gmail.com',
-      password: process.env.TEST_USER_PASSWORD || 'rubazayed',
+      email: process.env.TEST_USER_EMAIL || 'belal.riyad@gmail.com',
+      password: process.env.TEST_USER_PASSWORD || '9920032',
       name: 'Existing Test User'
     } : {
       email: `test${timestamp}@example.com`,
@@ -1020,8 +1020,8 @@ test.describe('Individual Core Scenarios', () => {
     console.log('🔐 SCENARIO 2: LOGIN WITH EXISTING ACCOUNT');
     console.log('='.repeat(60));
     
-    const email = process.env.TEST_USER_EMAIL || 'rubazayed@gmail.com';
-    const password = process.env.TEST_USER_PASSWORD || 'rubazayed';
+    const email = process.env.TEST_USER_EMAIL || 'belal.riyad@gmail.com';
+    const password = process.env.TEST_USER_PASSWORD || '9920032';
     
     try {
       await page.goto(`${PRODUCTION_URL}/login`);

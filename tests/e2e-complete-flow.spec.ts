@@ -17,8 +17,8 @@ test.describe('Setup and Run E2E Tests', () => {
     await page.goto('https://formgenai-4545.web.app/login');
     await page.waitForTimeout(2000);
     
-    const email = process.env.TEST_USER_EMAIL || 'test@example.com';
-    const password = process.env.TEST_USER_PASSWORD || 'password123';
+    const email = process.env.TEST_USER_EMAIL || 'belal.riyad@gmail.com';
+    const password = process.env.TEST_USER_PASSWORD || '9920032';
     
     await page.locator('input[type="email"]').fill(email);
     await page.locator('input[type="password"]').fill(password);
@@ -113,8 +113,8 @@ test.describe('Setup and Run E2E Tests', () => {
     console.log('🚀 STEP 2: RUNNING COMPLETE E2E WORKFLOW');
     console.log('='.repeat(70) + '\n');
     
-    const email = process.env.TEST_USER_EMAIL || 'test@example.com';
-    const password = process.env.TEST_USER_PASSWORD || 'password123';
+    const email = process.env.TEST_USER_EMAIL || 'belal.riyad@gmail.com';
+    const password = process.env.TEST_USER_PASSWORD || '9920032';
     
     // ============= STEP 1: LOGIN =============
     console.log('🔐 STEP 1/7: LOGIN');
@@ -130,14 +130,20 @@ test.describe('Setup and Run E2E Tests', () => {
     await page.getByRole('button', { name: /sign in/i }).click();
     console.log('⏳ Waiting for login...');
     
-    await page.waitForTimeout(5000);
-    
-    if (!page.url().includes('/admin')) {
+    // Wait for navigation to admin dashboard (increased timeout)
+    try {
+      await page.waitForURL('**/admin**', { timeout: 15000 });
+      console.log('✅ Login successful!');
+    } catch (error) {
       await page.screenshot({ path: 'test-results/e2e-error-login.png', fullPage: true });
-      throw new Error(`Login failed. Current URL: ${page.url()}`);
+      const currentUrl = page.url();
+      const pageText = await page.locator('body').textContent();
+      console.error(`❌ Login failed. Current URL: ${currentUrl}`);
+      console.error(`Page content: ${pageText?.substring(0, 500)}`);
+      throw new Error(`Login failed. Current URL: ${currentUrl}`);
     }
     
-    console.log('✅ Login successful!');
+    await page.waitForTimeout(2000);
     await page.screenshot({ path: 'test-results/e2e-04-admin-dashboard.png', fullPage: true });
     
     // ============= STEP 2: CHECK TEMPLATES =============
