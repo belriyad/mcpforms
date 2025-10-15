@@ -171,45 +171,54 @@ test.describe('E2E Simplified Test', () => {
     
     await takeScreenshot(page, 'simplified-05b-buttons-debug', 'Buttons debug on Step 2')
     
-    // Continue through wizard (click Next/Continue/Finish until service is created)
-    for (let i = 0; i < 5; i++) {
-      const continueBtn = page.getByRole('button', { name: /next|continue|finish|create|complete/i }).first()
-      const btnVisible = await continueBtn.isVisible({ timeout: 3000 }).catch(() => false)
-      const btnDisabled = await continueBtn.isDisabled().catch(() => true)
+    // Navigate through wizard steps (1→2→3→4)
+    // The wizard has 4 steps:
+    // Step 1: Service Details (already completed)
+    // Step 2: Template Selection (already completed - template selected)
+    // Step 3: Customize Templates (can skip)
+    // Step 4: Review & Send (final step with "Create & Send to Client" button)
+    
+    // Click "Next" from Step 2 to Step 3
+    console.log('🔄 Step 2→3: Clicking Next...')
+    const step2NextBtn = page.getByRole('button', { name: /next/i })
+    await safeClick(page, step2NextBtn, 'Next (Step 2→3)')
+    await page.waitForTimeout(2000)
+    await takeScreenshot(page, 'simplified-05d-wizard-step3', 'Wizard Step 3 - Customize')
+    
+    // Click "Next" from Step 3 to Step 4
+    console.log('🔄 Step 3→4: Clicking Next...')
+    const step3NextBtn = page.getByRole('button', { name: /next/i })
+    await safeClick(page, step3NextBtn, 'Next (Step 3→4)')
+    await page.waitForTimeout(2000)
+    await takeScreenshot(page, 'simplified-05e-wizard-step4', 'Wizard Step 4 - Review & Send')
+    
+    // On Step 4, click "Create & Send to Client" to finish
+    console.log('🔄 Step 4: Clicking Create & Send to Client...')
+    const createSendBtn = page.getByRole('button', { name: /create.*send/i })
+    const createClicked = await safeClick(page, createSendBtn, 'Create & Send to Client')
+    
+    if (!createClicked) {
+      console.log('⚠️  Create & Send button not found, trying alternatives...')
+      // Try other button text variations
+      const altButtons = [
+        page.locator('button:has-text("Create & Send")'),
+        page.locator('button:has-text("Create and Send")'),
+        page.locator('button:has-text("Finish")'),
+        page.locator('button:has-text("Complete")')
+      ]
       
-      console.log(`🔄 Attempt ${i + 1}: Button visible=${btnVisible}, disabled=${btnDisabled}`)
-      
-      if (btnVisible && !btnDisabled) {
-        console.log(`   Clicking continue button...`)
-        const clicked = await safeClick(page, continueBtn, `Continue (${i + 1})`)
-        
-        if (!clicked) {
-          console.log(`   ❌ Click failed, trying force click...`)
-          await continueBtn.click({ force: true }).catch(() => console.log('   ❌ Force click also failed'))
-        }
-        
-        await page.waitForTimeout(3000)
-        
-        // Check if we've navigated away from /create/
-        const currentUrl = page.url()
-        console.log(`   Current URL: ${currentUrl}`)
-        
-        if (!currentUrl.includes('/create')) {
-          console.log(`✅ Left wizard page: ${currentUrl}`)
+      for (const btn of altButtons) {
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await btn.click()
+          console.log('✅ Clicked alternative create button')
           break
         }
-      } else {
-        console.log(`   Button not clickable - visible=${btnVisible}, disabled=${btnDisabled}`)
-        
-        // Try pressing Enter as fallback
-        if (btnVisible) {
-          console.log('   Trying Enter key...')
-          await page.keyboard.press('Enter')
-          await page.waitForTimeout(2000)
-        }
-        break
       }
     }
+    
+    // Wait for service creation and redirect
+    console.log('⏳ Waiting for service creation...')
+    await page.waitForTimeout(8000)
     
     await takeScreenshot(page, 'simplified-06-service-created', 'After wizard completion')
     
