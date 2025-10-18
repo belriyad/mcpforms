@@ -11,6 +11,7 @@ import EditResponsesModal from '@/components/EditResponsesModal'
 import AIPreviewModal from '@/components/admin/AIPreviewModal'
 import PromptLibrary from '@/components/admin/PromptLibrary'
 import PromptEditor from '@/components/admin/PromptEditor'
+import DocumentEditorModal from '@/components/DocumentEditorModal'
 import { isFeatureEnabled } from '@/lib/feature-flags'
 import { savePrompt, incrementPromptUsage, AIPrompt } from '@/lib/prompts-client'
 import { 
@@ -48,6 +49,8 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [showEditResponses, setShowEditResponses] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [showDocumentEditor, setShowDocumentEditor] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<any | null>(null)
   const [aiPrompt, setAiPrompt] = useState('')
   const [generatingAI, setGeneratingAI] = useState(false)
 
@@ -910,45 +913,58 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                           </p>
                         </div>
                       </div>
-                      <button 
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={async () => {
-                          try {
-                            // Check if document has downloadUrl (actual file generated)
-                            if (!doc.downloadUrl) {
-                              alert('Document file is still being generated. Please try again in a moment.');
-                              return;
+                      <div className="flex items-center gap-2">
+                        <button 
+                          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all text-sm font-medium"
+                          onClick={() => {
+                            setSelectedDocument(doc)
+                            setShowDocumentEditor(true)
+                          }}
+                          title="Edit document with AI assistance"
+                        >
+                          <Edit className="w-4 h-4 inline mr-2" />
+                          Edit
+                        </button>
+                        <button 
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={async () => {
+                            try {
+                              // Check if document has downloadUrl (actual file generated)
+                              if (!doc.downloadUrl) {
+                                alert('Document file is still being generated. Please try again in a moment.');
+                                return;
+                              }
+                              
+                              // Download the document
+                              const response = await fetch(`/api/services/${service.id}/documents/${doc.id}/download`);
+                              
+                              if (!response.ok) {
+                                const error = await response.json();
+                                alert(`Download failed: ${error.error || 'Unknown error'}`);
+                                return;
+                              }
+                              
+                              // Create blob and trigger download
+                              const blob = await response.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = doc.fileName;
+                              document.body.appendChild(a);
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                              document.body.removeChild(a);
+                            } catch (error) {
+                              console.error('Download error:', error);
+                              alert('Failed to download document. Please try again.');
                             }
-                            
-                            // Download the document
-                            const response = await fetch(`/api/services/${service.id}/documents/${doc.id}/download`);
-                            
-                            if (!response.ok) {
-                              const error = await response.json();
-                              alert(`Download failed: ${error.error || 'Unknown error'}`);
-                              return;
-                            }
-                            
-                            // Create blob and trigger download
-                            const blob = await response.blob();
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = doc.fileName;
-                            document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                          } catch (error) {
-                            console.error('Download error:', error);
-                            alert('Failed to download document. Please try again.');
-                          }
-                        }}
-                        disabled={!doc.downloadUrl}
-                      >
-                        <Download className="w-4 h-4 inline mr-2" />
-                        {doc.downloadUrl ? 'Download' : 'Generating...'}
-                      </button>
+                          }}
+                          disabled={!doc.downloadUrl}
+                        >
+                          <Download className="w-4 h-4 inline mr-2" />
+                          {doc.downloadUrl ? 'Download' : 'Generating...'}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1049,6 +1065,23 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               console.log('Responses saved successfully')
             }}
           />
+          
+          {/* Document Editor Modal */}
+          {selectedDocument && (
+            <DocumentEditorModal
+              isOpen={showDocumentEditor}
+              onClose={() => {
+                setShowDocumentEditor(false)
+                setSelectedDocument(null)
+              }}
+              document={selectedDocument}
+              serviceId={service.id}
+              onSave={(updatedContent) => {
+                console.log('Document updated:', updatedContent)
+                // TODO: Implement document update in Firestore
+              }}
+            />
+          )}
           
           {/* AI Section Modal */}
           {showAIModal && (
