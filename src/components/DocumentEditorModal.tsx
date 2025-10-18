@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react'
 import { X, Sparkles, Loader2, FileText, Plus, Save, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { showSuccessToast, showErrorToast, showLoadingToast } from '@/lib/toast-helpers'
 import { toast } from 'react-hot-toast'
+import dynamic from 'next/dynamic'
+import 'react-quill/dist/quill.snow.css'
+import styles from './DocumentEditor.module.css'
+
+// Dynamically import ReactQuill to avoid SSR issues
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false })
 
 interface DocumentEditorModalProps {
   isOpen: boolean
@@ -32,12 +38,41 @@ export default function DocumentEditorModal({
   const [confidence, setConfidence] = useState<number | null>(null)
   const [showAIPanel, setShowAIPanel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [editorInstance, setEditorInstance] = useState<any>(null)
 
   useEffect(() => {
     if (isOpen && document.content) {
-      setContent(document.content)
+      // Convert plain text to HTML if needed
+      const htmlContent = document.content.includes('<') 
+        ? document.content 
+        : document.content.split('\n').map(line => `<p>${line || '<br>'}</p>`).join('')
+      setContent(htmlContent)
     }
   }, [isOpen, document])
+
+  // Rich text editor modules configuration
+  const modules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+      [{ 'font': [] }],
+      [{ 'size': ['small', false, 'large', 'huge'] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      [{ 'align': [] }],
+      ['link'],
+      ['clean']
+    ],
+  }
+
+  const formats = [
+    'header', 'font', 'size',
+    'bold', 'italic', 'underline', 'strike',
+    'color', 'background',
+    'list', 'bullet', 'indent',
+    'align', 'link'
+  ]
 
   const handleGenerateSection = async () => {
     if (!aiPrompt.trim()) {
@@ -82,8 +117,15 @@ export default function DocumentEditorModal({
 
   const handleAcceptSection = () => {
     if (generatedSection) {
-      // Add the generated section to the document content
-      setContent(content + '\n\n' + generatedSection)
+      // Convert generated section to HTML format
+      const formattedSection = generatedSection
+        .split('\n\n')
+        .map(para => `<p>${para}</p>`)
+        .join('')
+      
+      // Append to current content
+      setContent(content + '<br/>' + formattedSection)
+      
       setGeneratedSection(null)
       setAiPrompt('')
       setConfidence(null)
@@ -161,11 +203,16 @@ export default function DocumentEditorModal({
         {/* Content */}
         <div className="flex-1 overflow-hidden flex">
           {/* Main Editor */}
-          <div className="flex-1 flex flex-col p-6 overflow-hidden">
+          <div className={`flex-1 p-6 ${styles.editorContainer}`}>
             <div className="mb-4 flex items-center justify-between">
-              <label className="block text-sm font-medium text-gray-700">
-                Document Content
-              </label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Document Content
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Edit the entire document using rich text formatting
+                </p>
+              </div>
               <button
                 onClick={() => setShowAIPanel(!showAIPanel)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all text-sm font-medium"
@@ -175,15 +222,27 @@ export default function DocumentEditorModal({
               </button>
             </div>
 
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="flex-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm resize-none"
-              placeholder="Document content will appear here..."
-            />
+            <div className={`${styles.editorWrapper} rounded-lg border border-gray-300 bg-white shadow-sm`}>
+              <ReactQuill
+                theme="snow"
+                value={content}
+                onChange={setContent}
+                modules={modules}
+                formats={formats}
+                placeholder="Start editing your document here... Use the toolbar above to format text, add headings, lists, and more."
+              />
+            </div>
 
-            <div className="mt-4 text-sm text-gray-500">
-              {content.length.toLocaleString()} characters
+            <div className="mt-4 text-sm text-gray-500 flex items-center justify-between bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                <span className="text-blue-800">
+                  Full document editing enabled - all changes will be saved to output
+                </span>
+              </span>
+              <span className="text-blue-600 font-medium">
+                {content.replace(/<[^>]*>/g, '').length.toLocaleString()} characters
+              </span>
             </div>
           </div>
 

@@ -1,0 +1,130 @@
+/* Custom styles for Document Editor with React Quill */
+
+.editorContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.editorWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Make Quill editor take full height */
+.editorWrapper :global(.quill) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editorWrapper :global(.ql-container) {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.editorWrapper :global(.ql-editor) {
+  padding: 20px;
+  min-height: 100%;
+}
+
+/* Toolbar styling */
+.editorWrapper :global(.ql-toolbar) {
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb !important;
+  padding: 12px 8px;
+  flex-shrink: 0;
+}
+
+/* Enhanced toolbar buttons */
+.editorWrapper :global(.ql-toolbar .ql-stroke) {
+  stroke: #4b5563;
+}
+
+.editorWrapper :global(.ql-toolbar .ql-fill) {
+  fill: #4b5563;
+}
+
+.editorWrapper :global(.ql-toolbar button:hover),
+.editorWrapper :global(.ql-toolbar button:focus),
+.editorWrapper :global(.ql-toolbar button.ql-active) {
+  color: #3b82f6;
+}
+
+.editorWrapper :global(.ql-toolbar button:hover .ql-stroke),
+.editorWrapper :global(.ql-toolbar button:focus .ql-stroke),
+.editorWrapper :global(.ql-toolbar button.ql-active .ql-stroke) {
+  stroke: #3b82f6;
+}
+
+.editorWrapper :global(.ql-toolbar button:hover .ql-fill),
+.editorWrapper :global(.ql-toolbar button:focus .ql-fill),
+.editorWrapper :global(.ql-toolbar button.ql-active .ql-fill) {
+  fill: #3b82f6;
+}
+
+/* Better focus state */
+.editorWrapper :global(.ql-container.ql-snow) {
+  border-color: #e5e7eb;
+}
+
+.editorWrapper :global(.ql-editor:focus) {
+  outline: none;
+}
+
+/* Placeholder styling */
+.editorWrapper :global(.ql-editor.ql-blank::before) {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Typography in editor */
+.editorWrapper :global(.ql-editor h1) {
+  font-size: 2em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+}
+
+.editorWrapper :global(.ql-editor h2) {
+  font-size: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+}
+
+.editorWrapper :global(.ql-editor h3) {
+  font-size: 1.17em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+}
+
+.editorWrapper :global(.ql-editor p) {
+  margin-bottom: 0.75em;
+}
+
+.editorWrapper :global(.ql-editor ul),
+.editorWrapper :global(.ql-editor ol) {
+  margin-bottom: 0.75em;
+  padding-left: 1.5em;
+}
+
+/* Link styling */
+.editorWrapper :global(.ql-editor a) {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+/* Print-friendly styles */
+@media print {
+  .editorWrapper :global(.ql-toolbar) {
+    display: none;
+  }
+  
+  .editorWrapper :global(.ql-container) {
+    border: none;
+  }
+}
