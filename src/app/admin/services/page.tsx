@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { usePermissions } from '@/contexts/PermissionsContext'
+import { PermissionGuard } from '@/components/auth/PermissionGuard'
 import { 
   Plus, 
   FileText, 
@@ -139,13 +141,15 @@ export default function ServicesPage() {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Services</h1>
               <p className="text-gray-600">Manage client services and document preparation</p>
             </div>
-            <button
-              onClick={() => router.push('/admin/services/create')}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              <Plus className="w-5 h-5" />
-              New Service
-            </button>
+            <PermissionGuard permission="canCreateServices">
+              <button
+                onClick={() => router.push('/admin/services/create')}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+              >
+                <Plus className="w-5 h-5" />
+                New Service
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 
@@ -279,13 +283,15 @@ export default function ServicesPage() {
                   title={searchQuery ? 'No services match your search' : 'No services yet'}
                   description={searchQuery ? 'Try adjusting your search terms or filters' : 'Get started by creating your first service to manage client documents'}
                   action={!searchQuery ? (
-                    <button
-                      onClick={() => router.push('/admin/services/create')}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Create Service
-                    </button>
+                    <PermissionGuard permission="canCreateServices">
+                      <button
+                        onClick={() => router.push('/admin/services/create')}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Create Service
+                      </button>
+                    </PermissionGuard>
                   ) : undefined}
                 />
               </div>
@@ -299,13 +305,15 @@ export default function ServicesPage() {
                   {searchQuery ? 'Try adjusting your search terms' : 'Get started by creating your first service'}
                 </p>
                 {!searchQuery && (
-                  <button
-                    onClick={() => router.push('/admin/services/create')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Create Service
-                  </button>
+                  <PermissionGuard permission="canCreateServices">
+                    <button
+                      onClick={() => router.push('/admin/services/create')}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Create Service
+                    </button>
+                  </PermissionGuard>
                 )}
               </div>
             )

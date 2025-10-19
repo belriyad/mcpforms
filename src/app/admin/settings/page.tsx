@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/AuthProvider'
+import { usePermissions } from '@/contexts/PermissionsContext'
+import { useRouter } from 'next/navigation'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { 
@@ -11,7 +13,8 @@ import {
   Shield,
   Palette,
   Save,
-  Loader2
+  Loader2,
+  Users
 } from 'lucide-react'
 
 interface UserSettings {
@@ -29,7 +32,9 @@ interface UserSettings {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const { user } = useAuth()
+  const { hasPermission } = usePermissions()
   const [settings, setSettings] = useState<UserSettings>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -105,6 +110,19 @@ export default function SettingsPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
           <p className="text-gray-600">Manage your account preferences and notifications</p>
+          
+          {/* Quick Links */}
+          {hasPermission('canManageUsers') && (
+            <div className="mt-4">
+              <button
+                onClick={() => router.push('/admin/settings/users')}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                <Users className="w-4 h-4" />
+                Manage Team Members
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-6">

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
+import { usePermissions } from '@/contexts/PermissionsContext'
+import { PermissionGuard } from '@/components/auth/PermissionGuard'
 import { 
   Plus, 
   FileText, 
@@ -35,6 +37,7 @@ interface Template {
 export default function TemplatesPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const { hasPermission } = usePermissions()
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -118,13 +121,15 @@ export default function TemplatesPage() {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Templates</h1>
               <p className="text-gray-600">Upload and manage document templates</p>
             </div>
-            <button
-              onClick={() => router.push('/admin')} // Navigate to dashboard where upload is
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              <Upload className="w-5 h-5" />
-              Upload Template
-            </button>
+            <PermissionGuard permission="canUploadTemplates">
+              <button
+                onClick={() => router.push('/admin')} // Navigate to dashboard where upload is
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+              >
+                <Upload className="w-5 h-5" />
+                Upload Template
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 
