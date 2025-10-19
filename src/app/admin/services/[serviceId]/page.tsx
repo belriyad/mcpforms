@@ -11,7 +11,7 @@ import EditResponsesModal from '@/components/EditResponsesModal'
 import AIPreviewModal from '@/components/admin/AIPreviewModal'
 import PromptLibrary from '@/components/admin/PromptLibrary'
 import PromptEditor from '@/components/admin/PromptEditor'
-import DocumentEditorModal from '@/components/DocumentEditorModal'
+import AdvancedDocumentEditor from '@/components/AdvancedDocumentEditor'
 import { isFeatureEnabled } from '@/lib/feature-flags'
 import { savePrompt, incrementPromptUsage, AIPrompt } from '@/lib/prompts-client'
 import { 
@@ -917,6 +917,14 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                         <button 
                           className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all text-sm font-medium"
                           onClick={() => {
+                            console.log('🔍 Opening document for editing:', {
+                              fileName: doc.fileName,
+                              hasContent: !!doc.content,
+                              contentLength: doc.content?.length || 0,
+                              contentPreview: doc.content?.substring(0, 200),
+                              allFields: Object.keys(doc),
+                              fullDocument: doc
+                            })
                             setSelectedDocument(doc)
                             setShowDocumentEditor(true)
                           }}
@@ -925,6 +933,8 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                           <Edit className="w-4 h-4 inline mr-2" />
                           Edit
                         </button>
+                        
+                        {/* Download Original DOCX */}
                         <button 
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={async () => {
@@ -960,10 +970,55 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                             }
                           }}
                           disabled={!doc.downloadUrl}
+                          title="Download original DOCX file (unedited)"
                         >
                           <Download className="w-4 h-4 inline mr-2" />
-                          {doc.downloadUrl ? 'Download' : 'Generating...'}
+                          {doc.downloadUrl ? 'Original' : 'Generating...'}
                         </button>
+                        
+                        {/* Download Edited Version (DOCX) */}
+                        {doc.edited && doc.content && (
+                          <button 
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                            onClick={async () => {
+                              try {
+                                // Convert HTML to DOCX via API
+                                const response = await fetch('/api/documents/html-to-docx', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    htmlContent: doc.content,
+                                    fileName: doc.fileName.replace('.docx', '_edited.docx')
+                                  })
+                                });
+
+                                if (!response.ok) {
+                                  const error = await response.json();
+                                  alert(`Conversion failed: ${error.error || 'Unknown error'}`);
+                                  return;
+                                }
+
+                                // Download the converted DOCX
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = doc.fileName.replace('.docx', '_edited.docx');
+                                document.body.appendChild(a);
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                                document.body.removeChild(a);
+                              } catch (error) {
+                                console.error('Download edited version error:', error);
+                                alert('Failed to download edited version. Please try again.');
+                              }
+                            }}
+                            title="Download edited version as DOCX"
+                          >
+                            <Download className="w-4 h-4 inline mr-2" />
+                            Edited (DOCX)
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1066,9 +1121,9 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
             }}
           />
           
-          {/* Document Editor Modal */}
+          {/* Advanced Document Editor Modal */}
           {selectedDocument && (
-            <DocumentEditorModal
+            <AdvancedDocumentEditor
               isOpen={showDocumentEditor}
               onClose={() => {
                 setShowDocumentEditor(false)
@@ -1076,9 +1131,10 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
               }}
               document={selectedDocument}
               serviceId={service.id}
-              onSave={(updatedContent) => {
+              intakeData={service.clientResponse?.responses || {}}
+              onSave={(updatedContent: string) => {
                 console.log('Document updated:', updatedContent)
-                // TODO: Implement document update in Firestore
+                // Service will auto-update via onSnapshot listener
               }}
             />
           )}

@@ -5,6 +5,7 @@ import { Service } from '@/types/service'
 import { generateDocument, prepareTemplateData } from '@/lib/document-generator'
 import { sendDocumentsReadyEmail } from '@/lib/email-service'
 import { getBranding } from '@/lib/branding'
+import mammoth from 'mammoth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -91,6 +92,9 @@ export async function POST(request: NextRequest) {
         
         // AI sections that were included
         aiSections: template.aiSections || [],
+        
+        // HTML content for editor (will be set after generation)
+        content: null as string | null,
         
         // Download URL and storage info (will be set after actual document generation)
         downloadUrl: null as string | null,
@@ -198,6 +202,40 @@ export async function POST(request: NextRequest) {
         })
 
         console.log(`✅ Document generated: ${doc.fileName} (${generatedBuffer.length} bytes)`)
+
+        // Extract HTML content from the generated DOCX for the editor
+        try {
+          const result = await mammoth.convertToHtml({ buffer: generatedBuffer })
+          let htmlContent = result.value
+          
+          // Add some basic styling for the editor
+          htmlContent = `
+<div style="max-width: 8.5in; margin: 0 auto; padding: 40px; font-family: 'Times New Roman', serif; line-height: 1.6;">
+  ${htmlContent}
+</div>
+          `.trim()
+          
+          // Store the HTML content in the document
+          doc.content = htmlContent
+          console.log(`✅ HTML content extracted from DOCX: ${htmlContent.length} characters`)
+          
+          // Log any conversion messages (warnings about unsupported features)
+          if (result.messages && result.messages.length > 0) {
+            console.log(`ℹ️ Conversion messages:`, result.messages.slice(0, 5))
+          }
+        } catch (htmlError) {
+          console.error(`⚠️ Failed to extract HTML from DOCX:`, htmlError)
+          // Fall back to basic HTML with field data
+          doc.content = `
+<div style="max-width: 8.5in; margin: 0 auto; padding: 40px;">
+  <h1>${doc.templateName}</h1>
+  <p><strong>Client:</strong> ${service.clientName}</p>
+  <hr />
+  <p><em>Document content could not be extracted. Please download the DOCX file to view full content.</em></p>
+</div>
+          `.trim()
+          console.log(`⚠️ Using fallback HTML content`)
+        }
 
         // Upload to Cloud Storage
         const storagePath = `services/${serviceId}/documents/${doc.id}/${doc.fileName}`
