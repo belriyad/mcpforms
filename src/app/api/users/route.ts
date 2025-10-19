@@ -83,16 +83,23 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 POST /api/users - User creation request received')
+    
     if (!isAdminInitialized()) {
+      console.error('❌ Firebase Admin not initialized')
       return NextResponse.json(
         { error: 'Firebase Admin not configured' },
         { status: 503 }
       )
     }
 
-    const { email, name, permissions, sendInvitation } = await request.json()
+    const body = await request.json()
+    console.log('📦 Request body:', { email: body.email, name: body.name, hasPermissions: !!body.permissions })
+    
+    const { email, name, permissions, sendInvitation } = body
 
     if (!email || !name || !permissions) {
+      console.error('❌ Missing required fields:', { email: !!email, name: !!name, permissions: !!permissions })
       return NextResponse.json(
         { error: 'Email, name, and permissions are required' },
         { status: 400 }
@@ -102,34 +109,52 @@ export async function POST(request: NextRequest) {
     // Get current user from authorization header
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
+      console.error('❌ No authorization header found')
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized - No valid authorization token provided' },
         { status: 401 }
       )
     }
 
     const token = authHeader.substring(7)
+    console.log('🔑 Verifying authentication token...')
+    
     const auth = getAuth()
-    const decodedToken = await auth.verifyIdToken(token)
+    let decodedToken
+    try {
+      decodedToken = await auth.verifyIdToken(token)
+      console.log('✅ Token verified for user:', decodedToken.uid)
+    } catch (tokenError: any) {
+      console.error('❌ Token verification failed:', tokenError.message)
+      return NextResponse.json(
+        { error: 'Invalid authentication token', details: tokenError.message },
+        { status: 401 }
+      )
+    }
+    
     const currentUserId = decodedToken.uid
 
     console.log('👤 Creating new team member:', { email, name, creator: currentUserId })
 
     // Get current user's profile
+    console.log('📂 Fetching current user profile...')
     const adminDb = getAdminDb()
     const currentUserDoc = await adminDb.collection('users').doc(currentUserId).get()
     
     if (!currentUserDoc.exists) {
+      console.error('❌ Current user profile not found in Firestore:', currentUserId)
       return NextResponse.json(
-        { error: 'User profile not found' },
+        { error: 'User profile not found. Please contact support.' },
         { status: 404 }
       )
     }
 
     const currentUser = currentUserDoc.data() as UserProfile
+    console.log('✅ Current user loaded:', { uid: currentUserId, canManageUsers: currentUser.permissions?.canManageUsers })
 
     // Check if user has permission to manage users
     if (!currentUser.permissions?.canManageUsers) {
+      console.error('❌ Permission denied: User cannot manage users')
       return NextResponse.json(
         { error: 'You do not have permission to manage users' },
         { status: 403 }
@@ -137,8 +162,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Firebase Auth user with temporary password
+    console.log('🔐 Generating temporary password...')
     const tempPassword = Math.random().toString(36).slice(-12) + 'Aa1!'
     
+    console.log('👤 Creating Firebase Auth user...')
     let newUser
     try {
       newUser = await auth.createUser({
@@ -147,19 +174,23 @@ export async function POST(request: NextRequest) {
         displayName: name,
         emailVerified: false,
       })
+      console.log('✅ Created Firebase Auth user successfully:', newUser.uid)
     } catch (authError: any) {
+      console.error('❌ Firebase Auth creation failed:', authError)
       if (authError.code === 'auth/email-already-exists') {
         return NextResponse.json(
           { error: 'A user with this email already exists' },
           { status: 409 }
         )
       }
-      throw authError
+      return NextResponse.json(
+        { error: 'Failed to create user account', details: authError.message, code: authError.code },
+        { status: 500 }
+      )
     }
 
-    console.log('✅ Created Firebase Auth user:', newUser.uid)
-
     // Create user profile in Firestore
+    console.log('💾 Creating user profile in Firestore...')
     const newUserProfile: UserProfile = {
       uid: newUser.uid,
       email,
@@ -172,21 +203,37 @@ export async function POST(request: NextRequest) {
       isActive: true,
     }
 
-    await adminDb.collection('users').doc(newUser.uid).set(newUserProfile)
-
-    console.log('✅ Created user profile in Firestore')
+    try {
+      await adminDb.collection('users').doc(newUser.uid).set(newUserProfile)
+      console.log('✅ Created user profile in Firestore successfully')
+    } catch (firestoreError: any) {
+      console.error('❌ Firestore write failed:', firestoreError)
+      // Try to clean up the auth user if Firestore fails
+      try {
+        await auth.deleteUser(newUser.uid)
+        console.log('🧹 Cleaned up auth user after Firestore failure')
+      } catch (cleanupError) {
+        console.error('⚠️ Failed to cleanup auth user:', cleanupError)
+      }
+      return NextResponse.json(
+        { error: 'Failed to create user profile', details: firestoreError.message },
+        { status: 500 }
+      )
+    }
 
     // Generate password reset link for invitation email
     let resetLink = null
     if (sendInvitation) {
+      console.log('📧 Generating password reset link...')
       try {
         resetLink = await auth.generatePasswordResetLink(email)
-        console.log('✅ Generated password reset link')
-      } catch (linkError) {
-        console.error('⚠️ Failed to generate reset link:', linkError)
+        console.log('✅ Generated password reset link successfully')
+      } catch (linkError: any) {
+        console.error('⚠️ Failed to generate reset link:', linkError.message)
       }
     }
 
+    console.log('🎉 User creation completed successfully:', newUser.uid)
     return NextResponse.json({
       success: true,
       user: newUserProfile,
@@ -197,9 +244,10 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('❌ Error creating user:', error)
+    console.error('❌ Unexpected error creating user:', error)
+    console.error('Stack trace:', error.stack)
     return NextResponse.json(
-      { error: 'Failed to create user', details: error.message },
+      { error: 'Failed to create user', details: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack : undefined },
       { status: 500 }
     )
   }

@@ -29,11 +29,13 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
     setLoading(true)
 
     try {
+      console.log('🚀 Getting authentication token...')
       const token = await user?.getIdToken()
       if (!token) {
-        throw new Error('Not authenticated')
+        throw new Error('Not authenticated. Please log in again.')
       }
 
+      console.log('📡 Sending request to create user...')
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: {
@@ -48,11 +50,19 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
         }),
       })
 
+      console.log('📥 Response status:', response.status)
       const data = await response.json()
+      console.log('📥 Response data:', data)
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create team member')
+        // Provide detailed error message
+        const errorMessage = data.details 
+          ? `${data.error}: ${data.details}` 
+          : data.error || 'Failed to create team member'
+        throw new Error(errorMessage)
       }
+
+      console.log('✅ User created successfully')
 
       // Show success message if invitation was sent
       if (data.resetLink) {
@@ -69,8 +79,12 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
       setPermissions(PERMISSION_PRESETS.assistant.permissions)
       
     } catch (err: any) {
-      console.error('Error creating team member:', err)
-      setError(err.message || 'Failed to create team member')
+      console.error('❌ Error creating team member:', err)
+      const errorMessage = err.message || 'Failed to create team member. Please try again.'
+      setError(errorMessage)
+      
+      // Also show as alert for immediate visibility
+      alert(`Failed to create user: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
