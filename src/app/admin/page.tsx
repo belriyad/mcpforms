@@ -1,7 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth/AuthProvider'
-import AdminDashboard from '@/components/admin/AdminDashboard'
+import ModernDashboard from '@/components/admin/ModernDashboard'
 import { Loader2 } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -24,5 +24,5 @@ export default function AdminPage() {
     return null
   }
 
-  return <AdminDashboard />
+  return <ModernDashboard />
 }

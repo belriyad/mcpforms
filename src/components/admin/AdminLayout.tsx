@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuth } from '@/lib/auth/AuthProvider'
+import { signOut } from '@/lib/auth'
 import { useRouter, usePathname } from 'next/navigation'
 import { 
   LayoutDashboard,
@@ -19,18 +21,17 @@ import {
 } from 'lucide-react'
 import { isFeatureEnabled } from '@/lib/featureFlags'
 
-interface AdminLayoutWrapperProps {
-  children: React.ReactNode
-  user?: { email?: string | null }
-  userProfile?: { displayName?: string }
-  onSignOut: () => void
-}
-
-export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: AdminLayoutWrapperProps) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const { user, userProfile } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+
+  const handleSignOut = async () => {
+    await signOut()
+    router.push('/login')
+  }
 
   const navigation = [
     { 
@@ -221,7 +222,7 @@ export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: A
               </div>
             </div>
             <button
-              onClick={onSignOut}
+              onClick={handleSignOut}
               className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <LogOut className="w-4 h-4" />
