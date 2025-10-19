@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuth } from 'firebase-admin/auth'
 import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
-import { UserProfile, DEFAULT_MANAGER_PERMISSIONS } from '@/types/permissions'
+import { UserProfile } from '@/types/permissions'
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,13 +57,13 @@ export async function GET(request: NextRequest) {
 
     const teamMembers: UserProfile[] = []
     usersSnapshot.forEach(doc => {
-      teamMembers.push({ uid: doc.id, ...doc.data() } as UserProfile)
+      teamMembers.push({ ...doc.data(), uid: doc.id } as UserProfile)
     })
 
     // Also include the current user (manager)
     teamMembers.unshift({
-      uid: currentUserDoc.id,
-      ...currentUser
+      ...currentUser,
+      uid: currentUserDoc.id
     } as UserProfile)
 
     console.log(`✅ Found ${teamMembers.length} users`)
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
       createdBy: currentUserId,
       permissions,
-      active: true,
+      isActive: true,
     }
 
     await adminDb.collection('users').doc(newUser.uid).set(newUserProfile)
