@@ -26,10 +26,12 @@ interface IntakeForm {
   serviceName?: string
   clientName?: string
   clientEmail?: string
-  status: 'pending' | 'submitted' | 'viewed'
+  status: 'pending' | 'submitted' | 'intake_sent' | 'completed'
   createdAt: any
+  intakeFormSentAt?: any
   submittedAt?: any
   token: string
+  intakeLink?: string
 }
 
 export default function IntakesPage() {
@@ -44,24 +46,44 @@ export default function IntakesPage() {
   useEffect(() => {
     if (!user?.uid) return
 
-    const intakesQuery = query(
-      collection(db, 'intakeForms'),
+    // Query services that have intake forms sent (status = intake_sent or later)
+    const servicesQuery = query(
+      collection(db, 'services'),
       where('createdBy', '==', user.uid),
       orderBy('createdAt', 'desc')
     )
     
-    const unsubscribe = onSnapshot(intakesQuery, (snapshot) => {
-      const intakesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as IntakeForm[]
+    const unsubscribe = onSnapshot(servicesQuery, (snapshot) => {
+      // Filter services that have intake forms and map to IntakeForm structure
+      const intakesData = snapshot.docs
+        .map(doc => {
+          const data = doc.data()
+          
+          // Only include services with intake forms
+          if (!data.intakeForm) return null
+          
+          return {
+            id: doc.id,
+            serviceId: doc.id,
+            serviceName: data.name,
+            clientName: data.clientName,
+            clientEmail: data.clientEmail,
+            status: data.status || 'pending',
+            createdAt: data.createdAt,
+            intakeFormSentAt: data.intakeFormSentAt,
+            submittedAt: data.submittedAt,
+            token: data.intakeForm?.token || '',
+            intakeLink: data.intakeForm?.link || ''
+          } as IntakeForm
+        })
+        .filter((intake): intake is IntakeForm => intake !== null)
       
       setIntakes(intakesData)
       setError(null)
       setLoading(false)
     }, (error) => {
       console.error('Error loading intakes:', error)
-      setError('Failed to load intake forms')
+      setError('Failed to load intake forms. Please try again.')
       setLoading(false)
     })
 
@@ -87,7 +109,10 @@ export default function IntakesPage() {
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'submitted':
+      case 'completed':
         return { variant: 'success' as const, label: 'Submitted', icon: CheckCircle2 }
+      case 'intake_sent':
+        return { variant: 'info' as const, label: 'Sent', icon: Eye }
       case 'viewed':
         return { variant: 'info' as const, label: 'Viewed', icon: Eye }
       default:
@@ -122,7 +147,7 @@ export default function IntakesPage() {
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Pending</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {intakes.filter(i => i.status === 'pending').length}
+                    {intakes.filter(i => i.status === 'pending' || i.status === 'intake_sent').length}
                   </p>
                 </div>
                 <Clock className="w-8 h-8 text-yellow-600" />
@@ -134,7 +159,7 @@ export default function IntakesPage() {
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Submitted</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {intakes.filter(i => i.status === 'submitted').length}
+                    {intakes.filter(i => i.status === 'submitted' || i.status === 'completed').length}
                   </p>
                 </div>
                 <CheckCircle2 className="w-8 h-8 text-green-600" />
@@ -246,7 +271,7 @@ export default function IntakesPage() {
                               </StatusBadge>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {formatDate(intake.createdAt)}
+                              {formatDate(intake.intakeFormSentAt || intake.createdAt)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {intake.submittedAt ? formatDate(intake.submittedAt) : '-'}
