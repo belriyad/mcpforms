@@ -31,21 +31,57 @@ async function checkInvites() {
     
     if (membersSnapshot.empty) {
       console.log('ℹ️  No team members found where you are the manager');
+      console.log('   Expected managerId:', yourUid);
       console.log('\n📝 Checking all users...\n');
       
       // Check all users
       const allUsers = await db.collection('users').get();
       console.log(`Total users in database: ${allUsers.size}\n`);
       
+      let usersWithInvites = [];
+      
       allUsers.forEach(doc => {
         const data = doc.data();
+        if (data.inviteSentAt) {
+          usersWithInvites.push({
+            id: doc.id,
+            email: data.email,
+            name: data.name,
+            managerId: data.managerId,
+            inviteSentAt: data.inviteSentAt
+          });
+        }
         console.log(`User: ${data.email}`);
         console.log(`  UID: ${doc.id}`);
-        console.log(`  Manager ID: ${data.managerId || 'none'}`);
+        console.log(`  Manager ID: ${data.managerId || '⚠️  NONE'}`);
         console.log(`  Invite Sent: ${data.inviteSentAt || 'no'}`);
         console.log(`  Created: ${data.createdAt}`);
         console.log('');
       });
+      
+      console.log('\n🔍 DIAGNOSIS:\n');
+      if (usersWithInvites.length > 0) {
+        console.log(`Found ${usersWithInvites.length} user(s) with inviteSentAt:`);
+        usersWithInvites.forEach(u => {
+          console.log(`  - ${u.name} (${u.email})`);
+          console.log(`    Their managerId: ${u.managerId || '⚠️  NOT SET'}`);
+          console.log(`    Your UID: ${yourUid}`);
+          console.log(`    Match: ${u.managerId === yourUid ? '✅ YES' : '❌ NO'}`);
+          console.log('');
+        });
+        
+        const matchingCount = usersWithInvites.filter(u => u.managerId === yourUid).length;
+        console.log(`\n📊 Summary:`);
+        console.log(`   Users with invites: ${usersWithInvites.length}`);
+        console.log(`   Matching your managerId: ${matchingCount}`);
+        
+        if (matchingCount === 0) {
+          console.log('\n❌ PROBLEM IDENTIFIED:');
+          console.log('   None of the invited users have YOUR UID as their managerId!');
+          console.log('   This is why the UI query returns 0 results.');
+          console.log('\n💡 FIX: Update the managerId on these users to:', yourUid);
+        }
+      }
       
       return;
     }
