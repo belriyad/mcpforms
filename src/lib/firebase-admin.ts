@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import { getAuth } from 'firebase-admin/auth'
 
 // Initialize Firebase Admin (lazy initialization at runtime)
 let adminInitialized = false
@@ -68,6 +69,14 @@ export const getAdminStorage = () => {
     throw new Error('Firebase Admin not initialized. Please configure credentials.')
   }
   return getStorage(app)
+}
+
+export const getAdminAuth = () => {
+  initializeAdminIfNeeded()
+  if (!adminInitialized || !app) {
+    throw new Error('Firebase Admin not initialized. Please configure credentials.')
+  }
+  return getAuth(app)
 }
 
 export const isAdminInitialized = () => {

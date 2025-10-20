@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuth } from 'firebase-admin/auth'
-import { getAdminDb, isAdminInitialized } from '@/lib/firebase-admin'
+import { getAdminDb, isAdminInitialized, getAdminAuth } from '@/lib/firebase-admin'
 import { UserProfile } from '@/types/permissions'
 
 export async function GET(request: NextRequest) {
@@ -22,7 +21,9 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.substring(7)
-    const auth = getAuth()
+    
+    // Get current user from authorization header
+    const auth = getAdminAuth()
     const decodedToken = await auth.verifyIdToken(token)
     const currentUserId = decodedToken.uid
 
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     const token = authHeader.substring(7)
     console.log('🔑 Verifying authentication token...')
     
-    const auth = getAuth()
+    const auth = getAdminAuth()
     let decodedToken
     try {
       decodedToken = await auth.verifyIdToken(token)
