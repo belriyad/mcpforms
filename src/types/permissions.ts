@@ -53,6 +53,9 @@ export interface UserProfile {
   createdBy?: string
   permissions: UserPermissions
   isActive: boolean
+  inviteSentAt?: string
+  lastPasswordResetAt?: string
+  passwordResetBy?: string
 }
 
 // Permission Presets

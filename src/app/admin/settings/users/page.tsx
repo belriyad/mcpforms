@@ -7,7 +7,7 @@ import { usePermissions } from '@/contexts/PermissionsContext'
 import { collection, query, where, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { UserProfile, PERMISSION_PRESETS } from '@/types/permissions'
-import { Users, UserPlus, Edit, Trash2, Shield, ShieldCheck, ArrowLeft, Mail } from 'lucide-react'
+import { Users, UserPlus, Edit, Trash2, Shield, ShieldCheck, ArrowLeft, Mail, Key, MailCheck, Clock } from 'lucide-react'
 import AddTeamMemberModal from '@/components/admin/AddTeamMemberModal'
 import EditTeamMemberModal from '@/components/admin/EditTeamMemberModal'
 
@@ -19,6 +19,7 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingMember, setEditingMember] = useState<UserProfile | null>(null)
+  const [resettingPassword, setResettingPassword] = useState<string | null>(null)
 
   useEffect(() => {
     if (authLoading || permissionsLoading) return
@@ -80,6 +81,50 @@ export default function UserManagementPage() {
     }
   }
 
+  const handleResetPassword = async (member: UserProfile) => {
+    if (!confirm(`Send password reset email to ${member.email}?`)) {
+      return
+    }
+
+    setResettingPassword(member.uid)
+
+    try {
+      const token = await user?.getIdToken()
+      
+      const response = await fetch('/api/users/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: member.uid,
+          email: member.email
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send password reset')
+      }
+
+      // Update Firestore with reset timestamp
+      await updateDoc(doc(db, 'users', member.uid), {
+        lastPasswordResetAt: new Date().toISOString(),
+        passwordResetBy: user?.uid
+      })
+
+      alert(`Password reset email sent to ${member.email}`)
+      loadTeamMembers()
+    } catch (error: any) {
+      console.error('Error sending password reset:', error)
+      alert(error.message || 'Failed to send password reset email')
+    } finally {
+      setResettingPassword(null)
+    }
+  }
+
   const getPermissionCount = (member: UserProfile) => {
     return Object.values(member.permissions).filter(v => v === true).length
   }
@@ -129,8 +174,50 @@ export default function UserManagementPage() {
           </div>
         </div>
 
+        {/* Admin Account Section */}
+        {user && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-200 mb-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                  {user.email?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Your Account (Admin)</h3>
+                  <p className="text-sm text-gray-600">{user.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleResetPassword({
+                  uid: user.uid,
+                  email: user.email || '',
+                  name: 'Admin',
+                  accountType: 'manager',
+                  createdAt: new Date().toISOString(),
+                  permissions: {} as any,
+                  isActive: true
+                })}
+                disabled={resettingPassword === user.uid}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-purple-700 border-2 border-purple-300 rounded-lg hover:bg-purple-50 transition-colors font-medium disabled:opacity-50"
+              >
+                {resettingPassword === user.uid ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-4 h-4" />
+                    Reset My Password
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
@@ -153,6 +240,20 @@ export default function UserManagementPage() {
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <ShieldCheck className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Invites Sent</p>
+                <p className="text-3xl font-bold text-purple-600 mt-1">
+                  {teamMembers.filter(m => m.inviteSentAt).length}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <MailCheck className="w-6 h-6 text-purple-600" />
               </div>
             </div>
           </div>
@@ -205,6 +306,9 @@ export default function UserManagementPage() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Invite Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Permissions
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -243,6 +347,32 @@ export default function UserManagementPage() {
                           </span>
                         )}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          {member.inviteSentAt ? (
+                            <>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                <MailCheck className="w-3 h-3" />
+                                Invited
+                              </span>
+                              <div className="text-xs text-gray-500 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {new Date(member.inviteSentAt).toLocaleDateString()}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                              No invite sent
+                            </span>
+                          )}
+                          {member.lastPasswordResetAt && (
+                            <div className="text-xs text-gray-500 flex items-center gap-1">
+                              <Key className="w-3 h-3" />
+                              Reset: {new Date(member.lastPasswordResetAt).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {getPermissionCount(member)} / {Object.keys(member.permissions).length} enabled
                       </td>
@@ -250,18 +380,34 @@ export default function UserManagementPage() {
                         {new Date(member.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => setEditingMember(member)}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          <Edit className="w-4 h-4 inline" />
-                        </button>
-                        <button
-                          onClick={() => handleRemoveMember(member.uid)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="w-4 h-4 inline" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleResetPassword(member)}
+                            disabled={resettingPassword === member.uid}
+                            className="text-purple-600 hover:text-purple-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Send password reset email"
+                          >
+                            {resettingPassword === member.uid ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                            ) : (
+                              <Key className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setEditingMember(member)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Edit permissions"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveMember(member.uid)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Remove member"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const currentUserDoc = await adminDb.collection('users').doc(currentUserId).get()
     
     if (!currentUserDoc.exists) {
+      console.log('❌ User profile not found in Firestore:', currentUserId)
       return NextResponse.json(
         { error: 'User profile not found' },
         { status: 404 }
@@ -41,14 +42,28 @@ export async function GET(request: NextRequest) {
     }
 
     const currentUser = currentUserDoc.data() as UserProfile
+    console.log('👤 User profile loaded:', {
+      uid: currentUserId,
+      email: currentUser.email,
+      accountType: currentUser.accountType,
+      canManageUsers: currentUser.permissions?.canManageUsers,
+      allPermissions: currentUser.permissions
+    })
 
     // Check if user has permission to manage users
     if (!currentUser.permissions?.canManageUsers) {
+      console.log('⛔ Permission denied for user:', {
+        uid: currentUserId,
+        email: currentUser.email,
+        permissions: currentUser.permissions
+      })
       return NextResponse.json(
         { error: 'You do not have permission to manage users' },
         { status: 403 }
       )
     }
+    
+    console.log('✅ Permission check passed for user:', currentUserId)
 
     // Get all users where this user is the manager, or the user themselves
     const usersSnapshot = await adminDb
@@ -202,6 +217,7 @@ export async function POST(request: NextRequest) {
       createdBy: currentUserId,
       permissions,
       isActive: true,
+      inviteSentAt: sendInvitation ? new Date().toISOString() : undefined,
     }
 
     try {
