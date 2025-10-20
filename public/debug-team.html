@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Management Debug</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 10px;
+            background: #e3f2fd;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .member {
+            border-bottom: 1px solid #eee;
+            padding: 15px 0;
+        }
+        .member:last-child {
+            border-bottom: none;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .badge.invited {
+            background: #e1bee7;
+            color: #6a1b9a;
+        }
+        .badge.not-invited {
+            background: #e0e0e0;
+            color: #616161;
+        }
+        .badge.active {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        h1, h2 {
+            color: #1976d2;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 14px;
+        }
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #1565c0;
+        }
+        #output {
+            white-space: pre-wrap;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Team Management Debug Page</h1>
+    
+    <div class="card">
+        <h2>Quick Actions</h2>
+        <button onclick="checkFirestore()">Check Firestore Data</button>
+        <button onclick="checkAuth()">Check Auth Status</button>
+        <button onclick="location.reload()">Refresh Page</button>
+        <button onclick="goToTeamPage()">Go to Team Management</button>
+    </div>
+
+    <div class="card">
+        <h2>📊 Expected Stats</h2>
+        <div class="stat">Total Members: 2</div>
+        <div class="stat">Invites Sent: 1</div>
+        <div class="stat">Active: 2</div>
+    </div>
+
+    <div class="card">
+        <h2>👥 Team Members in Database</h2>
+        
+        <div class="member">
+            <h3>👤 Belal Riyad</h3>
+            <p>📧 Email: briyad@gmail.com</p>
+            <p>
+                <span class="badge active">Active</span>
+                <span class="badge not-invited">No invite sent</span>
+            </p>
+            <p class="timestamp">Created: 10/20/2025, 8:21 AM</p>
+        </div>
+
+        <div class="member">
+            <h3>👤 Belal Riyad</h3>
+            <p>📧 Email: briyad@gmail.com</p>
+            <p>
+                <span class="badge active">Active</span>
+                <span class="badge invited">✉️ Invited</span>
+            </p>
+            <p class="timestamp">Created: 10/20/2025, 8:46 AM</p>
+            <p class="timestamp">Invite sent: 10/20/2025, 8:46 AM</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🔍 Debug Output</h2>
+        <div id="output">Click a button above to run diagnostics...</div>
+    </div>
+
+    <script type="module">
+        // Firebase configuration (replace with your actual config)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKIk9WN2dTVyj2GWw8s2_8PCcHVPNXfHo",
+            authDomain: "formgenai-4545.firebaseapp.com",
+            projectId: "formgenai-4545",
+            storageBucket: "formgenai-4545.firebasestorage.app",
+            messagingSenderId: "1041821609193",
+            appId: "1:1041821609193:web:e4f72c9d8e1c5b8c8e0d5e"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                console.log('User logged in:', user.email);
+            } else {
+                console.log('No user logged in');
+            }
+        });
+
+        window.checkAuth = async function() {
+            const output = document.getElementById('output');
+            if (currentUser) {
+                output.textContent = `✅ Logged in as: ${currentUser.email}\nUID: ${currentUser.uid}`;
+            } else {
+                output.textContent = '❌ Not logged in. Please log in at:\nhttps://formgenai-4545.web.app/login';
+            }
+        };
+
+        window.checkFirestore = async function() {
+            const output = document.getElementById('output');
+            
+            if (!currentUser) {
+                output.textContent = '❌ Please log in first';
+                return;
+            }
+
+            output.textContent = 'Loading team members from Firestore...\n';
+
+            try {
+                const membersQuery = query(
+                    collection(db, 'users'),
+                    where('managerId', '==', currentUser.uid)
+                );
+
+                const snapshot = await getDocs(membersQuery);
+                
+                let result = `✅ Found ${snapshot.size} team member(s)\n\n`;
+                
+                let inviteCount = 0;
+                
+                snapshot.forEach(doc => {
+                    const member = doc.data();
+                    const hasInvite = !!member.inviteSentAt;
+                    if (hasInvite) inviteCount++;
+                    
+                    result += `👤 ${member.name || 'No name'}\n`;
+                    result += `   Email: ${member.email}\n`;
+                    result += `   Status: ${member.isActive ? '✅ Active' : '❌ Inactive'}\n`;
+                    result += `   Invite: ${hasInvite ? '✉️ Sent' : '⚠️ Not sent'}\n`;
+                    result += `   Created: ${new Date(member.createdAt).toLocaleString()}\n`;
+                    if (hasInvite) {
+                        result += `   Invite Date: ${new Date(member.inviteSentAt).toLocaleString()}\n`;
+                    }
+                    result += '\n';
+                });
+
+                result += `\n📊 Summary:\n`;
+                result += `   Total Members: ${snapshot.size}\n`;
+                result += `   Invites Sent: ${inviteCount}\n`;
+                result += `   Active: ${[...snapshot.docs].filter(d => d.data().isActive).length}\n`;
+
+                output.textContent = result;
+            } catch (error) {
+                output.textContent = `❌ Error: ${error.message}`;
+                console.error(error);
+            }
+        };
+
+        window.goToTeamPage = function() {
+            window.location.href = 'https://formgenai-4545.web.app/admin/settings/users';
+        };
+    </script>
+</body>
+</html>

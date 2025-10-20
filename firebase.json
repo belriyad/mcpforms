@@ -29,7 +29,13 @@
       "region": "us-central1",
       "memory": "512MiB",
       "concurrency": 80
-    }
+    },
+    "rewrites": [
+      {
+        "source": "**",
+        "function": "ssrformgenai4545"
+      }
+    ]
   },
   "storage": {
     "rules": "storage.rules"
