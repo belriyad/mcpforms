@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore'
+import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/lib/auth/AuthProvider'
 import { usePermissions } from '@/contexts/PermissionsContext'
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
 import { 
@@ -47,6 +48,8 @@ const STATUS_CONFIG = {
 
 export default function ServicesPage() {
   const router = useRouter()
+  const { user } = useAuth()
+  const { hasPermission } = usePermissions()
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | Service['status']>('all')
@@ -56,9 +59,12 @@ export default function ServicesPage() {
 
   // Load services from Firestore
   useEffect(() => {
+    if (!user?.uid) return
+
     try {
       const servicesQuery = query(
         collection(db, 'services'),
+        where('createdBy', '==', user.uid),
         orderBy('createdAt', 'desc')
       )
       

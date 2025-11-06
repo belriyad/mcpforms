@@ -73,8 +73,12 @@ service cloud.firestore {
     // Services - users can ONLY access their own services
     // MIGRATION MODE: Allow access to services without createdBy field
     match /services/{serviceId} {
-      // TEMPORARY: Allow all authenticated users to read services for debugging
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && 
+                     (
+                       resource.data.createdBy == request.auth.uid || 
+                       !('createdBy' in resource.data) ||  // Allow legacy services
+                       isAdmin()
+                     );
       
       allow create: if isLawyerOrAdmin() && 
                        request.resource.data.createdBy == request.auth.uid;
