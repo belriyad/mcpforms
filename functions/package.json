@@ -17,7 +17,7 @@
     "test:integration": "npm run build && mocha --require ts-node/register 'test/integration/**/*.test.ts' --timeout 60000"
   },
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "lib/index.js",
   "dependencies": {

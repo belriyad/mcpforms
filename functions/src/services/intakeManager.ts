@@ -305,6 +305,14 @@ export const intakeManager = {
 
       await db.collection("intakes").doc(intakeId).update(updates);
 
+      // Update the service status to intake_submitted
+      if (intake.serviceId) {
+        await db.collection("services").doc(intake.serviceId).update({
+          status: "intake_submitted",
+          updatedAt: new Date(),
+        });
+      }
+
       return { success: true, message: "Intake form submitted successfully" };
     } catch (error) {
       console.error("Error submitting intake form:", error);
