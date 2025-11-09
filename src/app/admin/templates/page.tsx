@@ -123,7 +123,7 @@ export default function TemplatesPage() {
             </div>
             <PermissionGuard permission="canUploadTemplates">
               <button
-                onClick={() => router.push('/admin')} // Navigate to dashboard where upload is
+                onClick={() => router.push('/admin/templates/upload')}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <Upload className="w-5 h-5" />
@@ -281,7 +281,7 @@ export default function TemplatesPage() {
                 description={searchQuery ? 'Try adjusting your search terms' : 'Upload your first document template to get started'}
                 action={!searchQuery ? (
                   <button
-                    onClick={() => router.push('/admin')}
+                    onClick={() => router.push('/admin/templates/upload')}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all"
                   >
                     <Upload className="w-5 h-5" />

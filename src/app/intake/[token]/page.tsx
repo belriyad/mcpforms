@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { LoadingSpinner, ProgressIndicator } from '@/components/ui/loading-components'
 import { showSuccessToast, showErrorToast } from '@/lib/toast-helpers'
 import CustomerCustomization from '@/components/intake/CustomerCustomization'
 import { getBrandingByServiceId, Branding, DEFAULT_BRANDING, getBrandingCSSVariables } from '@/lib/branding'
-import { isFeatureEnabled } from '@/lib/feature-flags'
+import { isFeatureEnabled } from '@/lib/featureFlags'
 import { Shield, Lock, Save, CheckCircle, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { Analytics } from '@/lib/analytics'
 
 interface FormField {
   id: string
@@ -57,6 +58,8 @@ export default function IntakeFormPage() {
   const [customClauses, setCustomClauses] = useState<any[]>([])
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING)
+  const formStartTime = useRef<number>(Date.now())
+  const hasTrackedStart = useRef(false)
   
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm()
 
@@ -129,6 +132,12 @@ export default function IntakeFormPage() {
 
       setIntakeData(validatedData)
       
+      // Track intake form opened
+      if (!hasTrackedStart.current) {
+        Analytics.intakeFormOpened(validatedData.intakeId, data.serviceId || 'unknown');
+        hasTrackedStart.current = true;
+      }
+      
       // Initialize custom fields and clauses from existing data
       setCustomFields(validatedData.existingCustomFields)
       setCustomClauses(validatedData.existingCustomClauses)
@@ -137,6 +146,9 @@ export default function IntakeFormPage() {
       if (validatedData.status === 'submitted') {
         setIsSubmitted(true)
         console.log('📝 Form already submitted, auto-save disabled')
+      } else {
+        // Track form started when user begins filling
+        Analytics.intakeFormStarted(validatedData.intakeId);
       }
       
       // Feature #18: Load branding if enabled
@@ -181,6 +193,12 @@ export default function IntakeFormPage() {
         status: intakeData?.status,
         isSubmitted 
       })
+      
+      // Track form saved
+      if (intakeData) {
+        Analytics.intakeFormSaved(intakeData.intakeId, completionPercentage);
+      }
+      
       // Use our new API endpoint
       await fetch(`/api/intake/save/${token}`, {
         method: 'POST',
@@ -204,6 +222,7 @@ export default function IntakeFormPage() {
     if (!intakeData) return
 
     setSubmitting(true)
+    const submissionDuration = Date.now() - formStartTime.current;
 
     try {
       console.log('🚀 Submitting form data:', { intakeId: intakeData.intakeId, formData })
@@ -237,6 +256,9 @@ export default function IntakeFormPage() {
       console.log('✅ Submit result:', result)
 
       if (result.success) {
+        // Track successful submission
+        Analytics.intakeFormSubmitted(intakeData.intakeId, submissionDuration);
+        
         showSuccessToast('Form submitted successfully!')
         // Set submitted flag immediately to stop all auto-save
         setIsSubmitted(true)

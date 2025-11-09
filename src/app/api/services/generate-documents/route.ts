@@ -10,7 +10,7 @@ import mammoth from 'mammoth'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { serviceId } = body
+    const { serviceId, useAI = true } = body // Default to AI generation
 
     if (!serviceId) {
       return NextResponse.json(
@@ -29,6 +29,53 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('📄 Generating documents for service:', serviceId)
+    console.log('🤖 Using AI generation:', useAI)
+    
+    // If AI generation is requested, call the cloud function
+    if (useAI) {
+      try {
+        console.log('🤖 Delegating to AI cloud function...')
+        
+        // Call the deployed cloud function
+        const functionUrl = process.env.NODE_ENV === 'production' 
+          ? 'https://us-central1-formgenai-4545.cloudfunctions.net/generateDocumentsWithAI'
+          : 'https://us-central1-formgenai-4545.cloudfunctions.net/generateDocumentsWithAI'; // Use production function even in dev
+        
+        const response = await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data: {
+              intakeId: serviceId, // Pass serviceId as intakeId (our fix handles this)
+              regenerate: true
+            }
+          })
+        });
+        
+        const result = await response.json();
+        console.log('🤖 AI function result:', result);
+        
+        if (result.result?.success) {
+          return NextResponse.json({
+            success: true,
+            message: result.result.message || 'Documents generated with AI',
+            artifactIds: result.result.data?.artifactIds || []
+          });
+        } else {
+          console.error('❌ AI generation failed:', result.result?.error);
+          console.log('⚠️ Falling back to docxtemplater method...');
+          // Fall through to docxtemplater method
+        }
+      } catch (aiError) {
+        console.error('❌ AI generation error:', aiError);
+        console.log('⚠️ Falling back to docxtemplater method...');
+        // Fall through to docxtemplater method
+      }
+    }
+
+    console.log('📄 Using docxtemplater method...')
 
     // Load service from Firestore using Admin SDK
     const adminDb = getAdminDb()
@@ -65,9 +112,13 @@ export async function POST(request: NextRequest) {
     const generatedDocuments = []
     const clientResponses = service.clientResponse.responses || {}
 
+    console.log('🔍 DEBUG: Client responses keys:', Object.keys(clientResponses))
+    console.log('🔍 DEBUG: Client responses data:', JSON.stringify(clientResponses, null, 2))
+
     // Generate a document for each template
     for (const template of service.templates || []) {
       console.log(`📄 Processing template: ${template.name}`)
+      console.log(`🔍 DEBUG: Template extracted fields:`, template.extractedFields?.map((f: any) => f.name) || [])
 
       // Create document metadata
       const generatedDoc = {
@@ -108,6 +159,7 @@ export async function POST(request: NextRequest) {
       // Map client responses to template fields
       for (const field of template.extractedFields || []) {
         const fieldValue = clientResponses[field.name]
+        console.log(`🔍 DEBUG: Checking field "${field.name}": ${fieldValue !== undefined ? 'FOUND ✅' : 'NOT FOUND ❌'}`, fieldValue)
         if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
           generatedDoc.populatedFields[field.name] = {
             fieldName: field.name,
@@ -117,6 +169,9 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+
+      console.log(`🔍 DEBUG: Populated ${Object.keys(generatedDoc.populatedFields).length} fields out of ${template.extractedFields?.length || 0} template fields`)
+      console.log(`🔍 DEBUG: Populated field names:`, Object.keys(generatedDoc.populatedFields))
 
       generatedDocuments.push(generatedDoc)
     }
@@ -174,6 +229,14 @@ export async function POST(request: NextRequest) {
           clientResponseValues[fieldName] = (fieldData as any).value
         }
 
+        console.log('\n' + '='.repeat(80))
+        console.log('� FIELDS AND VALUES FOR TEMPLATE:')
+        console.log('='.repeat(80))
+        for (const [fieldName, value] of Object.entries(clientResponseValues)) {
+          console.log(`  ${fieldName}: "${value}"`)
+        }
+        console.log('='.repeat(80) + '\n')
+
         // Prepare AI sections
         const aiSections: Record<string, string> = {}
         if (template.aiSections && template.aiSections.length > 0) {
@@ -192,7 +255,13 @@ export async function POST(request: NextRequest) {
         templateData.clientName = service.clientName
         templateData.clientEmail = service.clientEmail
 
-        console.log('📋 Template data prepared with keys:', Object.keys(templateData))
+        console.log('\n' + '='.repeat(80))
+        console.log('📋 COMPLETE TEMPLATE DATA (Including Metadata):')
+        console.log('='.repeat(80))
+        for (const [key, value] of Object.entries(templateData)) {
+          console.log(`  ${key}: "${value}"`)
+        }
+        console.log('='.repeat(80) + '\n')
 
         // Generate document using the proper library function
         const generatedBuffer = await generateDocument({
@@ -207,6 +276,14 @@ export async function POST(request: NextRequest) {
         try {
           const result = await mammoth.convertToHtml({ buffer: generatedBuffer })
           let htmlContent = result.value
+          
+          // Log the plain text content for debugging
+          const plainTextResult = await mammoth.extractRawText({ buffer: generatedBuffer })
+          console.log('\n' + '='.repeat(80))
+          console.log('📄 GENERATED DOCUMENT CONTENT (Plain Text):')
+          console.log('='.repeat(80))
+          console.log(plainTextResult.value)
+          console.log('='.repeat(80) + '\n')
           
           // Add some basic styling for the editor
           htmlContent = `
@@ -351,8 +428,19 @@ export async function POST(request: NextRequest) {
     // Send email notification to client about ready documents
     if (service.clientEmail && successfulDocs > 0) {
       try {
-        // Get branding for email template
-        const branding = await getBranding(service.createdBy)
+        // Get branding for email template (use default if fails due to permissions)
+        let branding;
+        try {
+          branding = await getBranding(service.createdBy);
+        } catch (brandingError) {
+          console.warn('⚠️ Failed to get branding, using defaults:', brandingError);
+          branding = {
+            primaryColor: '#3B82F6',
+            secondaryColor: '#1E40AF',
+            logoUrl: null,
+            companyName: 'MCPForms'
+          };
+        }
         
         // Get list of successful document names
         const documentNames = generatedDocuments

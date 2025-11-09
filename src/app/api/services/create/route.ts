@@ -15,8 +15,17 @@ export async function POST(request: NextRequest) {
 
     const body: CreateServiceRequest = await request.json()
     
+    console.log('📝 Service creation request body:', JSON.stringify(body, null, 2))
+    
     // Validate required fields
     if (!body.name || !body.clientName || !body.clientEmail || !body.templateIds || body.templateIds.length === 0) {
+      console.error('❌ Validation failed:', {
+        hasName: !!body.name,
+        hasClientName: !!body.clientName,
+        hasClientEmail: !!body.clientEmail,
+        hasTemplateIds: !!body.templateIds,
+        templateIdsLength: body.templateIds?.length
+      })
       return NextResponse.json(
         { error: 'Missing required fields: name, clientName, clientEmail, templateIds' },
         { status: 400 }

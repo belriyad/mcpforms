@@ -384,7 +384,10 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ serviceId: service.id }),
+        body: JSON.stringify({ 
+          serviceId: service.id,
+          useAI: true // Enable AI-powered document generation
+        }),
       })
 
       const result = await response.json()

@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google'
 import { Toaster } from 'react-hot-toast'
 import '../styles/globals.css'
 import { AuthProvider } from '@/lib/auth/AuthProvider'
+import { PageTracker } from '@/components/PageTracker'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,6 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
+          <PageTracker />
           {children}
           <Toaster
             position="top-right"

@@ -73,7 +73,7 @@ export default function TemplateEditorPage({ params }: { params: { templateId: s
       
       if (!templateDoc.exists()) {
         showErrorToast('Template not found')
-        router.push('/admin')
+        router.push('/admin/templates')
         return
       }
 

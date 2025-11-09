@@ -70,18 +70,45 @@ exports.documentGeneratorAI = {
     async generateDocumentsFromIntake(intakeId, regenerate = false) {
         try {
             console.log(`🤖 [AI-GEN] Starting AI-powered document generation for intake ${intakeId}`);
-            // Get intake data
+            // Try to get intake from intakes collection first (legacy flow)
+            let intake = null;
+            let serviceId = null;
             const intakeDoc = await db.collection("intakes").doc(intakeId).get();
-            if (!intakeDoc.exists) {
-                return { success: false, error: "Intake not found" };
+            if (intakeDoc.exists) {
+                intake = intakeDoc.data();
+                serviceId = intake.serviceId;
+                console.log(`📋 [AI-GEN] Found intake in intakes collection`);
             }
-            const intake = intakeDoc.data();
+            else {
+                // If not found, assume intakeId is actually a serviceId (new flow)
+                // This happens when intake data is stored in service.clientResponse
+                console.log(`📋 [AI-GEN] No intake document found, treating as serviceId`);
+                serviceId = intakeId;
+            }
+            if (!serviceId) {
+                return { success: false, error: "Could not determine service ID" };
+            }
             // Get service and templates
-            const serviceDoc = await db.collection("services").doc(intake.serviceId).get();
+            const serviceDoc = await db.collection("services").doc(serviceId).get();
             if (!serviceDoc.exists) {
                 return { success: false, error: "Service not found" };
             }
             const service = serviceDoc.data();
+            // If we don't have intake data from intakes collection, get it from service
+            if (!intake) {
+                const clientResponse = service === null || service === void 0 ? void 0 : service.clientResponse;
+                if (!clientResponse || !clientResponse.responses) {
+                    return { success: false, error: "No intake data found in service" };
+                }
+                // Construct intake object from service data
+                intake = {
+                    id: serviceId,
+                    serviceId: serviceId,
+                    clientData: clientResponse.responses,
+                };
+                console.log(`📋 [AI-GEN] Using intake data from service.clientResponse`);
+                console.log(`📋 [AI-GEN] Client data keys: ${Object.keys(intake.clientData).join(', ')}`);
+            }
             const templateIds = (service === null || service === void 0 ? void 0 : service.templateIds) || [];
             const templateDocs = await Promise.all(templateIds.map((id) => db.collection("templates").doc(id).get()));
             const templates = [];
@@ -114,11 +141,24 @@ exports.documentGeneratorAI = {
             if (artifactIds.length === 0) {
                 return { success: false, error: "Failed to generate any documents" };
             }
-            // Update intake status
-            await db.collection("intakes").doc(intakeId).update({
-                status: "documents-generated",
-                updatedAt: new Date(),
-            });
+            // Update status - check if intake document exists first
+            const intakeExists = await db.collection("intakes").doc(intakeId).get();
+            if (intakeExists.exists) {
+                // Update intake document (legacy flow)
+                await db.collection("intakes").doc(intakeId).update({
+                    status: "documents-generated",
+                    updatedAt: new Date(),
+                });
+                console.log(`📝 [AI-GEN] Updated intake document status`);
+            }
+            else {
+                // Update service document status (new flow)
+                await db.collection("services").doc(serviceId).update({
+                    status: "documents_ready",
+                    updatedAt: new Date(),
+                });
+                console.log(`📝 [AI-GEN] Updated service document status`);
+            }
             console.log(`🎉 [AI-GEN] Successfully generated ${artifactIds.length} documents`);
             return {
                 success: true,

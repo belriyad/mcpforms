@@ -15,7 +15,8 @@ import {
   X,
   Palette,
   FlaskConical,
-  ChevronDown
+  ChevronDown,
+  BarChart3
 } from 'lucide-react'
 import { isFeatureEnabled } from '@/lib/featureFlags'
 
@@ -38,6 +39,12 @@ export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: A
       href: '/admin', 
       icon: LayoutDashboard,
       current: pathname === '/admin'
+    },
+    { 
+      name: 'Analytics', 
+      href: '/admin/analytics', 
+      icon: BarChart3,
+      current: pathname?.startsWith('/admin/analytics')
     },
     { 
       name: 'Templates', 

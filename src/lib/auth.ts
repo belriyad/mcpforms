@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { Analytics } from './analytics'
 
 export interface UserProfile {
   uid: string
@@ -22,6 +23,8 @@ export interface UserProfile {
  * Sign up a new user
  */
 export async function signUp(email: string, password: string, displayName: string) {
+  Analytics.signupStarted(); // Track signup attempt
+  
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
@@ -41,9 +44,16 @@ export async function signUp(email: string, password: string, displayName: strin
 
     await setDoc(doc(db, 'users', user.uid), userProfile)
 
+    // Track successful signup
+    Analytics.signupCompleted(user.uid);
+
     return { success: true, user: userProfile }
   } catch (error: any) {
     console.error('Sign up error:', error)
+    
+    // Track failed signup
+    Analytics.signupFailed(error.code);
+    
     return { 
       success: false, 
       error: error.code === 'auth/email-already-in-use' 
@@ -59,9 +69,20 @@ export async function signUp(email: string, password: string, displayName: strin
  * Sign in existing user
  */
 export async function signIn(email: string, password: string) {
+  Analytics.loginAttempted(email); // Track login attempt
+  
   try {
+    console.log('🔐 Attempting sign in for:', email)
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
+    console.log('✅ Sign in successful:', user.uid)
+
+    // Fetch user profile to get role
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const userProfile = userDoc.data() as UserProfile;
+
+    // Track successful login
+    Analytics.loginSuccess(user.uid, userProfile?.role || 'lawyer');
 
     // Update last login asynchronously (don't wait for it)
     setDoc(doc(db, 'users', user.uid), {
@@ -71,12 +92,27 @@ export async function signIn(email: string, password: string) {
     // Don't fetch profile here - AuthProvider will do it
     return { success: true }
   } catch (error: any) {
-    console.error('Sign in error:', error)
+    console.error('❌ Sign in error:', error)
+    console.error('Error code:', error.code)
+    console.error('Error message:', error.message)
+    
+    // Track failed login
+    Analytics.loginFailed(error.code);
+    
+    // Map Firebase error codes to user-friendly messages
+    const errorMessages: Record<string, string> = {
+      'auth/user-not-found': 'No account found with this email',
+      'auth/wrong-password': 'Incorrect password',
+      'auth/invalid-email': 'Invalid email address',
+      'auth/user-disabled': 'This account has been disabled',
+      'auth/too-many-requests': 'Too many failed attempts. Please try again later',
+      'auth/network-request-failed': 'Network error. Please check your connection',
+      'auth/invalid-credential': 'Invalid email or password'
+    }
+    
     return { 
       success: false, 
-      error: error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password'
-        ? 'Invalid email or password' 
-        : 'Failed to sign in' 
+      error: errorMessages[error.code] || `Failed to sign in (${error.code})`
     }
   }
 }

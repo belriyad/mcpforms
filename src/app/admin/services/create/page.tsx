@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
+import { Analytics, Funnel } from '@/lib/analytics'
 import { 
   ArrowLeft,
   ArrowRight,
@@ -131,6 +132,12 @@ export default function CreateServicePage() {
         createdBy: user?.uid || 'unknown' // Add user ID
       }
       
+      console.log('📤 Sending service creation request:', {
+        ...serviceData,
+        hasUserId: !!user?.uid,
+        userId: user?.uid
+      })
+      
       const createResult = await fetch('/api/services/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,10 +145,18 @@ export default function CreateServicePage() {
       })
       
       if (!createResult.ok) {
-        throw new Error('Failed to create service')
+        const errorData = await createResult.json()
+        console.error('❌ Service creation failed:', errorData)
+        throw new Error(errorData.error || 'Failed to create service')
       }
       
       const { serviceId } = await createResult.json()
+      
+      // Track service creation
+      Analytics.serviceCreated(serviceId, serviceName);
+      if (user?.uid) {
+        Funnel.onboardingServiceCreated(user.uid, serviceId);
+      }
       
       // Step 2: Load templates
       await fetch('/api/services/load-templates', {
@@ -151,11 +166,16 @@ export default function CreateServicePage() {
       })
       
       // Step 3: Generate intake form
-      await fetch('/api/services/generate-intake', {
+      const intakeResult = await fetch('/api/services/generate-intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceId })
       })
+      
+      const { intakeId } = await intakeResult.json();
+      
+      // Track intake form creation
+      Analytics.intakeFormCreated(serviceId, intakeId);
       
       // Step 4: Send intake form
       await fetch('/api/services/send-intake', {
@@ -164,6 +184,12 @@ export default function CreateServicePage() {
         body: JSON.stringify({ serviceId })
       })
       
+      // Track intake email sent
+      Analytics.intakeEmailSent(intakeId, clientEmail);
+      if (user?.uid) {
+        Funnel.onboardingIntakeSent(user.uid, intakeId);
+      }
+      
       toast.dismiss(loadingToastId)
       showSuccessToast('Service created and intake form sent!')
       router.push(`/admin/services/${serviceId}`)
@@ -171,6 +197,12 @@ export default function CreateServicePage() {
       toast.dismiss(loadingToastId)
       console.error('Error creating service:', error)
       showErrorToast(error instanceof Error ? error.message : 'Failed to create service')
+      
+      // Track error
+      Analytics.errorOccurred('service_creation', 
+        error instanceof Error ? error.message : 'Unknown error',
+        'create_service_page'
+      );
     } finally {
       setCreating(false)
     }
