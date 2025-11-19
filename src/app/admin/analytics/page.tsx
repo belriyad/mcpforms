@@ -3,55 +3,48 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { useRouter } from 'next/navigation'
+import { useSubscription } from '@/contexts/SubscriptionContext'
 import { db } from '@/lib/firebase'
-import { collection, query, where, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore'
 import { 
   ChartBarIcon, 
-  UserGroupIcon, 
   DocumentTextIcon, 
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
-  ClockIcon,
-  FunnelIcon,
-  ExclamationTriangleIcon
+  InboxIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline'
+import { Crown } from 'lucide-react'
 
 interface MetricCard {
   label: string
   value: string | number
-  change?: number
-  trend?: 'up' | 'down'
+  subtitle?: string
   icon: React.ComponentType<{ className?: string }>
+  color: string
 }
 
-interface AnalyticsEvent {
+interface RecentActivity {
   id: string
-  eventName: string
-  timestamp: string
-  userId?: string
-  sessionId?: string
-  parameters?: Record<string, any>
-}
-
-interface FunnelStep {
-  step: string
-  count: number
-  percentage: number
+  type: 'service' | 'template' | 'intake' | 'document'
+  name: string
+  date: Date
+  status?: string
 }
 
 export default function AnalyticsPage() {
   const { user } = useAuth()
   const router = useRouter()
+  const { isPremium, loading: subLoading } = useSubscription()
   const [loading, setLoading] = useState(true)
-  const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d')
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('30d')
   
   // Metrics state
   const [metrics, setMetrics] = useState<MetricCard[]>([])
-  const [recentEvents, setRecentEvents] = useState<AnalyticsEvent[]>([])
-  const [onboardingFunnel, setOnboardingFunnel] = useState<FunnelStep[]>([])
-  const [documentFunnel, setDocumentFunnel] = useState<FunnelStep[]>([])
-  const [topEvents, setTopEvents] = useState<{ name: string; count: number }[]>([])
-  const [errorEvents, setErrorEvents] = useState<AnalyticsEvent[]>([])
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
+  const [statusBreakdown, setStatusBreakdown] = useState({
+    services: { active: 0, draft: 0, total: 0 },
+    intakes: { submitted: 0, pending: 0, total: 0 },
+    documents: { ready: 0, generating: 0, total: 0 }
+  })
 
   useEffect(() => {
     if (!user) {
@@ -59,20 +52,28 @@ export default function AnalyticsPage() {
       return
     }
 
-    loadAnalyticsData()
-  }, [user, timeRange])
+    // Redirect non-premium users
+    if (!subLoading && !isPremium) {
+      router.push('/admin')
+      return
+    }
 
-  const getTimeRangeDate = () => {
+    if (!subLoading && isPremium) {
+      loadAnalyticsData()
+    }
+  }, [user, isPremium, subLoading, timeRange, router])
+
+  const getTimeRangeDate = (): Date | null => {
     const now = new Date()
     switch (timeRange) {
-      case '24h':
-        return new Date(now.getTime() - 24 * 60 * 60 * 1000)
       case '7d':
         return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       case '30d':
         return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      case 'all':
+        return null
       default:
-        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     }
   }
 
@@ -81,37 +82,148 @@ export default function AnalyticsPage() {
     try {
       const startDate = getTimeRangeDate()
       
-      // Load recent events
-      const eventsQuery = query(
-        collection(db, 'analyticsEvents'),
-        where('timestamp', '>=', startDate.toISOString()),
-        orderBy('timestamp', 'desc'),
-        limit(100)
+      // Load templates
+      let templatesQuery = query(
+        collection(db, 'templates'),
+        where('createdBy', '==', user!.uid)
       )
+      if (startDate) {
+        templatesQuery = query(templatesQuery, where('createdAt', '>=', Timestamp.fromDate(startDate)))
+      }
+      const templatesSnapshot = await getDocs(templatesQuery)
+      const templatesCount = templatesSnapshot.size
       
-      const eventsSnapshot = await getDocs(eventsQuery)
-      const events = eventsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as AnalyticsEvent[]
+      // Load services
+      let servicesQuery = query(
+        collection(db, 'services'),
+        where('createdBy', '==', user!.uid)
+      )
+      if (startDate) {
+        servicesQuery = query(servicesQuery, where('createdAt', '>=', Timestamp.fromDate(startDate)))
+      }
+      const servicesSnapshot = await getDocs(servicesQuery)
+      const servicesCount = servicesSnapshot.size
+      
+      // Count service statuses
+      let activeServices = 0, draftServices = 0
+      servicesSnapshot.docs.forEach(doc => {
+        const status = doc.data().status
+        if (status === 'active' || status === 'intake_sent' || status === 'documents_ready') {
+          activeServices++
+        } else if (status === 'draft') {
+          draftServices++
+        }
+      })
+      
+      // Load intakes
+      const intakesQuery = query(collection(db, 'intakes'))
+      const intakesSnapshot = await getDocs(intakesQuery)
+      
+      // Filter intakes by service ownership
+      const userServiceIds = servicesSnapshot.docs.map(doc => doc.id)
+      let intakesCount = 0, submittedIntakes = 0, pendingIntakes = 0
+      
+      intakesSnapshot.docs.forEach(doc => {
+        const intake = doc.data()
+        if (userServiceIds.includes(intake.serviceId)) {
+          intakesCount++
+          if (intake.status === 'submitted' || intake.status === 'approved') {
+            submittedIntakes++
+          } else if (intake.status === 'link-generated' || intake.status === 'opened') {
+            pendingIntakes++
+          }
+        }
+      })
+      
+      // Count documents (generatedDocuments from services)
+      let documentsCount = 0
+      servicesSnapshot.docs.forEach(doc => {
+        const generatedDocuments = doc.data().generatedDocuments || []
+        documentsCount += generatedDocuments.length
+      })
 
-      setRecentEvents(events.slice(0, 10))
+      // Set metrics
+      setMetrics([
+        {
+          label: 'Total Templates',
+          value: templatesCount,
+          subtitle: 'Document templates uploaded',
+          icon: DocumentTextIcon,
+          color: 'blue'
+        },
+        {
+          label: 'Total Services',
+          value: servicesCount,
+          subtitle: `${activeServices} active, ${draftServices} draft`,
+          icon: Cog6ToothIcon,
+          color: 'green'
+        },
+        {
+          label: 'Total Intakes',
+          value: intakesCount,
+          subtitle: `${submittedIntakes} submitted`,
+          icon: InboxIcon,
+          color: 'purple'
+        },
+        {
+          label: 'Documents Generated',
+          value: documentsCount,
+          subtitle: 'Across all services',
+          icon: ChartBarIcon,
+          color: 'orange'
+        }
+      ])
 
-      // Calculate metrics
-      await calculateMetrics(events)
+      setStatusBreakdown({
+        services: { active: activeServices, draft: draftServices, total: servicesCount },
+        intakes: { submitted: submittedIntakes, pending: pendingIntakes, total: intakesCount },
+        documents: { ready: documentsCount, generating: 0, total: documentsCount }
+      })
+
+      // Load recent activity
+      const activity: RecentActivity[] = []
       
-      // Calculate funnels
-      await calculateFunnels(events)
+      // Recent services
+      const recentServicesQuery = query(
+        collection(db, 'services'),
+        where('createdBy', '==', user!.uid),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      )
+      const recentServices = await getDocs(recentServicesQuery)
+      recentServices.docs.forEach(doc => {
+        const data = doc.data()
+        activity.push({
+          id: doc.id,
+          type: 'service',
+          name: data.name || 'Untitled Service',
+          date: data.createdAt?.toDate() || new Date(),
+          status: data.status
+        })
+      })
       
-      // Get top events
-      calculateTopEvents(events)
+      // Recent templates
+      const recentTemplatesQuery = query(
+        collection(db, 'templates'),
+        where('createdBy', '==', user!.uid),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      )
+      const recentTemplates = await getDocs(recentTemplatesQuery)
+      recentTemplates.docs.forEach(doc => {
+        const data = doc.data()
+        activity.push({
+          id: doc.id,
+          type: 'template',
+          name: data.name || 'Untitled Template',
+          date: data.createdAt?.toDate() || new Date(),
+          status: data.status
+        })
+      })
       
-      // Get error events
-      const errors = events.filter(e => 
-        e.eventName.includes('failed') || 
-        e.eventName.includes('error')
-      ).slice(0, 5)
-      setErrorEvents(errors)
+      // Sort by date and limit
+      activity.sort((a, b) => b.date.getTime() - a.date.getTime())
+      setRecentActivity(activity.slice(0, 10))
 
     } catch (error) {
       console.error('Error loading analytics:', error)
@@ -120,410 +232,218 @@ export default function AnalyticsPage() {
     }
   }
 
-  const calculateMetrics = async (events: AnalyticsEvent[]) => {
-    const uniqueUsers = new Set(events.map(e => e.userId).filter(Boolean)).size
-    const totalEvents = events.length
-    const landingVisits = events.filter(e => e.eventName === 'landing_page_visit').length
-    const signups = events.filter(e => e.eventName === 'signup_completed').length
-    const logins = events.filter(e => e.eventName === 'login_success').length
-    const servicesCreated = events.filter(e => e.eventName === 'service_created').length
-    const intakesSubmitted = events.filter(e => e.eventName === 'intake_form_submitted').length
-    const docsGenerated = events.filter(e => e.eventName === 'document_generated').length
-
-    const conversionRate = landingVisits > 0 
-      ? ((signups / landingVisits) * 100).toFixed(1) 
-      : '0'
-
-    setMetrics([
-      {
-        label: 'Active Users',
-        value: uniqueUsers,
-        icon: UserGroupIcon,
-        trend: 'up',
-        change: 12
-      },
-      {
-        label: 'Total Events',
-        value: totalEvents.toLocaleString(),
-        icon: ChartBarIcon,
-        trend: 'up',
-        change: 8
-      },
-      {
-        label: 'Signups',
-        value: signups,
-        icon: ArrowTrendingUpIcon,
-        trend: 'up',
-        change: 15
-      },
-      {
-        label: 'Conversion Rate',
-        value: `${conversionRate}%`,
-        icon: FunnelIcon,
-        trend: signups > logins ? 'up' : 'down',
-        change: 5
-      },
-      {
-        label: 'Services Created',
-        value: servicesCreated,
-        icon: DocumentTextIcon,
-        trend: 'up',
-        change: 10
-      },
-      {
-        label: 'Intakes Submitted',
-        value: intakesSubmitted,
-        icon: DocumentTextIcon,
-        trend: 'up',
-        change: 7
-      },
-      {
-        label: 'Documents Generated',
-        value: docsGenerated,
-        icon: DocumentTextIcon,
-        trend: 'up',
-        change: 9
-      },
-      {
-        label: 'Avg. Session Time',
-        value: '5:32',
-        icon: ClockIcon,
-        trend: 'up',
-        change: 3
-      }
-    ])
+  const getColorClass = (color: string) => {
+    const colors = {
+      blue: 'from-blue-500 to-blue-600',
+      green: 'from-green-500 to-green-600',
+      purple: 'from-purple-500 to-purple-600',
+      orange: 'from-orange-500 to-orange-600'
+    }
+    return colors[color as keyof typeof colors] || colors.blue
   }
 
-  const calculateFunnels = async (events: AnalyticsEvent[]) => {
-    // Onboarding funnel
-    const landingVisits = events.filter(e => e.eventName === 'landing_page_visit').length
-    const startTrialClicks = events.filter(e => e.eventName === 'start_trial_clicked').length
-    const signupsStarted = events.filter(e => e.eventName === 'signup_started').length
-    const signupsCompleted = events.filter(e => e.eventName === 'signup_completed').length
-    const logins = events.filter(e => e.eventName === 'login_success').length
-    const servicesCreated = events.filter(e => e.eventName === 'service_created').length
-
-    const onboardingSteps: FunnelStep[] = [
-      { step: 'Landing Visit', count: landingVisits, percentage: 100 },
-      { 
-        step: 'Start Trial Click', 
-        count: startTrialClicks, 
-        percentage: landingVisits > 0 ? (startTrialClicks / landingVisits) * 100 : 0 
-      },
-      { 
-        step: 'Signup Started', 
-        count: signupsStarted, 
-        percentage: landingVisits > 0 ? (signupsStarted / landingVisits) * 100 : 0 
-      },
-      { 
-        step: 'Signup Completed', 
-        count: signupsCompleted, 
-        percentage: landingVisits > 0 ? (signupsCompleted / landingVisits) * 100 : 0 
-      },
-      { 
-        step: 'Login Success', 
-        count: logins, 
-        percentage: landingVisits > 0 ? (logins / landingVisits) * 100 : 0 
-      },
-      { 
-        step: 'Service Created', 
-        count: servicesCreated, 
-        percentage: landingVisits > 0 ? (servicesCreated / landingVisits) * 100 : 0 
-      }
-    ]
-
-    setOnboardingFunnel(onboardingSteps)
-
-    // Document funnel
-    const intakesOpened = events.filter(e => e.eventName === 'intake_form_opened').length
-    const intakesStarted = events.filter(e => e.eventName === 'intake_form_started').length
-    const intakesSaved = events.filter(e => e.eventName === 'intake_form_saved').length
-    const intakesSubmitted = events.filter(e => e.eventName === 'intake_form_submitted').length
-    const docsGenerated = events.filter(e => e.eventName === 'document_generated').length
-    const docsDownloaded = events.filter(e => e.eventName === 'document_downloaded').length
-
-    const documentSteps: FunnelStep[] = [
-      { step: 'Intake Opened', count: intakesOpened, percentage: 100 },
-      { 
-        step: 'Intake Started', 
-        count: intakesStarted, 
-        percentage: intakesOpened > 0 ? (intakesStarted / intakesOpened) * 100 : 0 
-      },
-      { 
-        step: 'Progress Saved', 
-        count: intakesSaved, 
-        percentage: intakesOpened > 0 ? (intakesSaved / intakesOpened) * 100 : 0 
-      },
-      { 
-        step: 'Intake Submitted', 
-        count: intakesSubmitted, 
-        percentage: intakesOpened > 0 ? (intakesSubmitted / intakesOpened) * 100 : 0 
-      },
-      { 
-        step: 'Doc Generated', 
-        count: docsGenerated, 
-        percentage: intakesOpened > 0 ? (docsGenerated / intakesOpened) * 100 : 0 
-      },
-      { 
-        step: 'Doc Downloaded', 
-        count: docsDownloaded, 
-        percentage: intakesOpened > 0 ? (docsDownloaded / intakesOpened) * 100 : 0 
-      }
-    ]
-
-    setDocumentFunnel(documentSteps)
-  }
-
-  const calculateTopEvents = (events: AnalyticsEvent[]) => {
-    const eventCounts = events.reduce((acc, event) => {
-      acc[event.eventName] = (acc[event.eventName] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-
-    const sorted = Object.entries(eventCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
-
-    setTopEvents(sorted)
-  }
-
-  const formatEventName = (eventName: string) => {
-    return eventName
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-  }
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp)
+  const formatDate = (date: Date) => {
     const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
+    const diff = now.getTime() - date.getTime()
+    const hours = Math.floor(diff / (1000 * 60 * 60))
     
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
-    return `${Math.floor(diffMins / 1440)}d ago`
+    if (hours < 1) return 'Just now'
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days}d ago`
+    return date.toLocaleDateString()
   }
 
-  if (loading) {
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'service':
+        return Cog6ToothIcon
+      case 'template':
+        return DocumentTextIcon
+      case 'intake':
+        return InboxIcon
+      default:
+        return ChartBarIcon
+    }
+  }
+
+  if (subLoading || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading analytics...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading analytics...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isPremium) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <Crown className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Premium Feature</h2>
+          <p className="text-gray-600 mb-6">
+            Analytics is only available for Premium subscribers. Upgrade to access detailed insights about your templates, services, and documents.
+          </p>
+          <button
+            onClick={() => router.push('/admin/settings')}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium"
+          >
+            Upgrade to Premium
+          </button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-              <p className="mt-2 text-gray-600">
-                Comprehensive tracking and insights for your platform
-              </p>
-            </div>
-            
-            {/* Time Range Selector */}
-            <div className="flex gap-2">
-              {(['24h', '7d', '30d'] as const).map((range) => (
-                <button
-                  key={range}
-                  onClick={() => setTimeRange(range)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    timeRange === range
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {range === '24h' ? '24 Hours' : range === '7d' ? '7 Days' : '30 Days'}
-                </button>
-              ))}
-            </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
+            <p className="mt-2 text-gray-600">
+              Real-time insights into your templates, services, and documents
+            </p>
+          </div>
+          
+          {/* Time Range Selector */}
+          <div className="flex gap-2">
+            {(['7d', '30d', 'all'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  timeRange === range
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                }`}
+              >
+                {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : 'All Time'}
+              </button>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {metrics.map((metric, index) => (
-            <div key={index} className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">{metric.label}</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900">{metric.value}</p>
-                  {metric.change !== undefined && (
-                    <div className="mt-2 flex items-center">
-                      {metric.trend === 'up' ? (
-                        <ArrowTrendingUpIcon className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <ArrowTrendingDownIcon className="h-4 w-4 text-red-600" />
-                      )}
-                      <span className={`ml-1 text-sm ${
-                        metric.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {metric.change}%
-                      </span>
-                    </div>
-                  )}
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {metrics.map((metric, index) => {
+          const Icon = metric.icon
+          return (
+            <div key={index} className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-3 rounded-lg bg-gradient-to-r ${getColorClass(metric.color)}`}>
+                  <Icon className="h-6 w-6 text-white" />
                 </div>
-                <metric.icon className="h-10 w-10 text-blue-600" />
               </div>
+              <p className="text-sm text-gray-600 mb-1">{metric.label}</p>
+              <p className="text-3xl font-bold text-gray-900 mb-2">{metric.value}</p>
+              {metric.subtitle && (
+                <p className="text-xs text-gray-500">{metric.subtitle}</p>
+              )}
             </div>
-          ))}
-        </div>
+          )
+        })}
+      </div>
 
-        {/* Funnels Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Onboarding Funnel */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Onboarding Funnel</h2>
-            <div className="space-y-3">
-              {onboardingFunnel.map((step, index) => (
-                <div key={index}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-700">{step.step}</span>
-                    <span className="text-gray-900 font-medium">
-                      {step.count} ({step.percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{ width: `${step.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+      {/* Status Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Services Status</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Active</span>
+              <span className="font-semibold text-green-600">{statusBreakdown.services.active}</span>
             </div>
-          </div>
-
-          {/* Document Funnel */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Document Funnel</h2>
-            <div className="space-y-3">
-              {documentFunnel.map((step, index) => (
-                <div key={index}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-700">{step.step}</span>
-                    <span className="text-gray-900 font-medium">
-                      {step.count} ({step.percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-green-600 h-2 rounded-full transition-all"
-                      style={{ width: `${step.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="flex justify-between">
+              <span className="text-gray-600">Draft</span>
+              <span className="font-semibold text-gray-500">{statusBreakdown.services.draft}</span>
+            </div>
+            <div className="pt-3 border-t border-gray-200 flex justify-between">
+              <span className="font-medium text-gray-900">Total</span>
+              <span className="font-bold text-gray-900">{statusBreakdown.services.total}</span>
             </div>
           </div>
         </div>
 
-        {/* Top Events & Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Top Events */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Top Events</h2>
-            <div className="space-y-2">
-              {topEvents.map((event, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <div className="flex items-center">
-                    <span className="text-sm font-medium text-gray-500 w-6">{index + 1}</span>
-                    <span className="text-sm text-gray-900">{formatEventName(event.name)}</span>
-                  </div>
-                  <span className="text-sm font-bold text-blue-600">{event.count}</span>
-                </div>
-              ))}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Intakes Status</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Submitted</span>
+              <span className="font-semibold text-green-600">{statusBreakdown.intakes.submitted}</span>
             </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Recent Activity</h2>
-            <div className="space-y-3">
-              {recentEvents.map((event) => (
-                <div key={event.id} className="flex items-start justify-between py-2 border-b border-gray-100 last:border-0">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {formatEventName(event.eventName)}
-                    </p>
-                    {event.userId && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        User: {event.userId.substring(0, 8)}...
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    {formatTimestamp(event.timestamp)}
-                  </span>
-                </div>
-              ))}
+            <div className="flex justify-between">
+              <span className="text-gray-600">Pending</span>
+              <span className="font-semibold text-yellow-600">{statusBreakdown.intakes.pending}</span>
+            </div>
+            <div className="pt-3 border-t border-gray-200 flex justify-between">
+              <span className="font-medium text-gray-900">Total</span>
+              <span className="font-bold text-gray-900">{statusBreakdown.intakes.total}</span>
             </div>
           </div>
         </div>
 
-        {/* Error Events */}
-        {errorEvents.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center mb-4">
-              <ExclamationTriangleIcon className="h-6 w-6 text-red-600 mr-2" />
-              <h2 className="text-xl font-bold text-gray-900">Recent Errors</h2>
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Documents</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Ready</span>
+              <span className="font-semibold text-green-600">{statusBreakdown.documents.ready}</span>
             </div>
-            <div className="space-y-3">
-              {errorEvents.map((event) => (
-                <div key={event.id} className="bg-red-50 rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-red-900">
-                        {formatEventName(event.eventName)}
-                      </p>
-                      {event.parameters?.error && (
-                        <p className="text-xs text-red-700 mt-1">
-                          {event.parameters.error}
-                        </p>
-                      )}
-                      {event.userId && (
-                        <p className="text-xs text-red-600 mt-1">
-                          User: {event.userId.substring(0, 8)}...
-                        </p>
-                      )}
+            <div className="flex justify-between">
+              <span className="text-gray-600">Generating</span>
+              <span className="font-semibold text-blue-600">{statusBreakdown.documents.generating}</span>
+            </div>
+            <div className="pt-3 border-t border-gray-200 flex justify-between">
+              <span className="font-medium text-gray-900">Total</span>
+              <span className="font-bold text-gray-900">{statusBreakdown.documents.total}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+        {recentActivity.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No recent activity</p>
+        ) : (
+          <div className="space-y-4">
+            {recentActivity.map((activity) => {
+              const Icon = getTypeIcon(activity.type)
+              return (
+                <div key={activity.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-white rounded-lg shadow-sm">
+                      <Icon className="h-5 w-5 text-gray-600" />
                     </div>
-                    <span className="text-xs text-red-600">
-                      {formatTimestamp(event.timestamp)}
-                    </span>
+                    <div>
+                      <p className="font-medium text-gray-900">{activity.name}</p>
+                      <p className="text-sm text-gray-500 capitalize">{activity.type}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {activity.status && (
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-1 ${
+                        activity.status === 'active' || activity.status === 'ready' || activity.status === 'submitted'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {activity.status}
+                      </span>
+                    )}
+                    <p className="text-xs text-gray-500">{formatDate(activity.date)}</p>
                   </div>
                 </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
         )}
-
-        {/* Export Button */}
-        <div className="mt-8 flex justify-end">
-          <button
-            onClick={() => {
-              const data = JSON.stringify({ metrics, onboardingFunnel, documentFunnel, topEvents, recentEvents }, null, 2)
-              const blob = new Blob([data], { type: 'application/json' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `analytics-${new Date().toISOString()}.json`
-              a.click()
-            }}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            Export Data
-          </button>
-        </div>
       </div>
     </div>
   )

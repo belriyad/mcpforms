@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import UsageMetricsWidget from '@/components/admin/analytics/UsageMetricsWidget'
 import { collection, query, onSnapshot, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
@@ -300,9 +299,6 @@ export default function ModernDashboard() {
             Here's what's happening with your legal forms automation today.
           </p>
         </div>
-
-        {/* Usage Metrics Widget */}
-        {user && <UsageMetricsWidget organizationId={user.uid} />}
 
         {/* Key Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

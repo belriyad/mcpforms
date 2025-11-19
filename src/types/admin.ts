@@ -73,6 +73,21 @@ export interface User {
   invitedAt?: Timestamp;
   lastPasswordReset?: Timestamp;
   lastLogin?: Timestamp;
+  
+  // Subscription information
+  subscription?: {
+    tier: 'FREE' | 'PREMIUM';
+    status: 'active' | 'past_due' | 'canceled' | 'trialing';
+    startDate: Timestamp;
+    endDate?: Timestamp;
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    currentUsage: {
+      templatesCount: number;
+      servicesCount: number;
+      usersCount: number;
+    };
+  };
 }
 
 // ============================================

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { usePermissions } from '@/contexts/PermissionsContext'
+import { useSubscription } from '@/contexts/SubscriptionContext'
 import { collection, query, where, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { UserProfile, PERMISSION_PRESETS } from '@/types/permissions'
@@ -15,6 +16,7 @@ export default function UserManagementPage() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
   const { hasPermission, isManager, loading: permissionsLoading } = usePermissions()
+  const { isPremium, loading: subscriptionLoading } = useSubscription()
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -22,20 +24,21 @@ export default function UserManagementPage() {
   const [resettingPassword, setResettingPassword] = useState<string | null>(null)
 
   useEffect(() => {
-    if (authLoading || permissionsLoading) return
+    if (authLoading || permissionsLoading || subscriptionLoading) return
 
     if (!user) {
       router.push('/login')
       return
     }
 
-    if (!hasPermission('canManageUsers')) {
+    // Check both permissions AND subscription
+    if (!isPremium || !hasPermission('canManageUsers')) {
       router.push('/admin')
       return
     }
 
     loadTeamMembers()
-  }, [user, authLoading, permissionsLoading, hasPermission])
+  }, [user, authLoading, permissionsLoading, subscriptionLoading, hasPermission, isPremium])
 
   const loadTeamMembers = async () => {
     if (!user) return

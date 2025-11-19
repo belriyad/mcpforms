@@ -14,7 +14,8 @@ import {
   Palette,
   Save,
   Loader2,
-  Users
+  Users,
+  CreditCard
 } from 'lucide-react'
 
 interface UserSettings {
@@ -112,17 +113,25 @@ export default function SettingsPage() {
           <p className="text-gray-600">Manage your account preferences and notifications</p>
           
           {/* Quick Links */}
-          {hasPermission('canManageUsers') && (
-            <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              onClick={() => router.push('/admin/settings/subscription')}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg hover:from-yellow-500 hover:to-orange-600 transition-all text-sm font-medium shadow-sm"
+            >
+              <CreditCard className="w-4 h-4" />
+              Subscription & Billing
+            </button>
+            
+            {hasPermission('canManageUsers') && (
               <button
                 onClick={() => router.push('/admin/settings/users')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
               >
                 <Users className="w-4 h-4" />
                 Manage Team Members
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="space-y-6">

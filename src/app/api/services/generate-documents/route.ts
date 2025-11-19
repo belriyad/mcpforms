@@ -86,6 +86,55 @@ export async function POST(request: NextRequest) {
           
           console.log(`📄 Found ${generatedDocuments.length} generated documents in service`);
           
+          // Auto-format each generated document with AI
+          console.log('🎨 Starting auto AI format for all generated documents...');
+          const formatPromises = generatedDocuments.map(async (doc: any) => {
+            try {
+              console.log(`🎨 Formatting document: ${doc.name}`);
+              
+              // Download the document content
+              const storage = getAdminStorage();
+              const bucket = storage.bucket();
+              const file = bucket.file(doc.fileUrl);
+              const [fileBuffer] = await file.download();
+              
+              // Extract HTML content from the document
+              const { value: htmlContent } = await mammoth.convertToHtml({ buffer: fileBuffer });
+              const { value: plainText } = await mammoth.extractRawText({ buffer: fileBuffer });
+              
+              // Get intake data for field population
+              const intakeData = serviceData?.clientResponse?.data || {};
+              
+              // Call format-document API
+              const formatResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/documents/format-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  htmlContent,
+                  plainText,
+                  intakeFields: intakeData,
+                  documentName: doc.name
+                })
+              });
+              
+              if (formatResponse.ok) {
+                const formatResult = await formatResponse.json();
+                console.log(`✅ Successfully formatted document: ${doc.name}`);
+                return { success: true, documentId: doc.id, name: doc.name };
+              } else {
+                console.error(`❌ Failed to format document: ${doc.name}`);
+                return { success: false, documentId: doc.id, name: doc.name };
+              }
+            } catch (error) {
+              console.error(`❌ Error formatting document ${doc.name}:`, error);
+              return { success: false, documentId: doc.id, name: doc.name, error };
+            }
+          });
+          
+          const formatResults = await Promise.all(formatPromises);
+          const successfulFormats = formatResults.filter(r => r.success).length;
+          console.log(`✅ AI formatted ${successfulFormats} of ${generatedDocuments.length} documents`);
+          
           return NextResponse.json({
             success: true,
             message: result.result.message || 'Documents generated with AI',
@@ -95,7 +144,8 @@ export async function POST(request: NextRequest) {
               name: doc.name,
               downloadUrl: doc.downloadUrl,
               createdAt: doc.createdAt
-            }))
+            })),
+            formattedCount: successfulFormats
           });
         } else {
           console.error('❌ AI generation failed:', result.result?.error);

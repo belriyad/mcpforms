@@ -19,6 +19,7 @@ import {
   BarChart3
 } from 'lucide-react'
 import { isFeatureEnabled } from '@/lib/featureFlags'
+import { useSubscription } from '@/contexts/SubscriptionContext'
 
 interface AdminLayoutWrapperProps {
   children: React.ReactNode
@@ -32,6 +33,7 @@ export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: A
   const [settingsOpen, setSettingsOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  const { canPerformAction, subscription, isPremium } = useSubscription()
 
   const navigation = [
     { 
@@ -40,12 +42,13 @@ export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: A
       icon: LayoutDashboard,
       current: pathname === '/admin'
     },
-    { 
+    // Analytics - Premium only
+    ...(canPerformAction('canViewAnalytics') ? [{ 
       name: 'Analytics', 
       href: '/admin/analytics', 
       icon: BarChart3,
       current: pathname?.startsWith('/admin/analytics')
-    },
+    }] : []),
     { 
       name: 'Templates', 
       href: '/admin/templates', 
@@ -91,12 +94,13 @@ export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: A
       icon: Palette,
       current: pathname?.startsWith('/admin/settings/branding')
     }] : []),
-    {
+    // Team Management - Premium only (fixed bug)
+    ...(isPremium && canPerformAction('canManageUsers') ? [{
       name: 'Team',
       href: '/admin/settings/users',
       icon: Users,
       current: pathname?.startsWith('/admin/settings/users')
-    },
+    }] : []),
     {
       name: 'Labs',
       href: '/admin/labs',
@@ -221,9 +225,21 @@ export function AdminLayoutWrapper({ children, user, userProfile, onSignOut }: A
                 {(userProfile?.displayName || user?.email)?.[0]?.toUpperCase() || 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {userProfile?.displayName || user?.email?.split('@')[0] || 'User'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {userProfile?.displayName || user?.email?.split('@')[0] || 'User'}
+                  </p>
+                  {/* Subscription Tier Badge */}
+                  {isPremium ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-sm">
+                      ✨ PRO
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                      FREE
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500 truncate">{user?.email}</p>
               </div>
             </div>

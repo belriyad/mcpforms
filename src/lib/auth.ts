@@ -6,7 +6,7 @@ import {
   User,
   updateProfile
 } from 'firebase/auth'
-import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { Analytics } from './analytics'
 
@@ -32,7 +32,7 @@ export async function signUp(email: string, password: string, displayName: strin
     // Update display name
     await updateProfile(user, { displayName })
 
-    // Create user profile in Firestore
+    // Create user profile in Firestore with FREE subscription
     const userProfile: UserProfile = {
       uid: user.uid,
       email: user.email!,
@@ -42,7 +42,20 @@ export async function signUp(email: string, password: string, displayName: strin
       lastLogin: new Date().toISOString()
     }
 
-    await setDoc(doc(db, 'users', user.uid), userProfile)
+    await setDoc(doc(db, 'users', user.uid), {
+      ...userProfile,
+      // Initialize with FREE subscription
+      subscription: {
+        tier: 'FREE',
+        status: 'active',
+        startDate: serverTimestamp(),
+        currentUsage: {
+          templatesCount: 0,
+          servicesCount: 0,
+          usersCount: 1
+        }
+      }
+    })
 
     // Track successful signup
     Analytics.signupCompleted(user.uid);

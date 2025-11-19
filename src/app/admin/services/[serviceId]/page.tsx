@@ -45,6 +45,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
   const [error, setError] = useState<string | null>(null)
   const [showIntakePreview, setShowIntakePreview] = useState(false)
   const [generatingDocs, setGeneratingDocs] = useState(false)
+  const [generationPhase, setGenerationPhase] = useState<'generating' | 'formatting' | null>(null)
   const [showViewResponses, setShowViewResponses] = useState(false)
   const [showEditResponses, setShowEditResponses] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
@@ -376,6 +377,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
     if (!service) return
     
     setGeneratingDocs(true)
+    setGenerationPhase('generating')
     let currentDocuments: any = null
     
     try {
@@ -391,6 +393,11 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       })
 
       const result = await response.json()
+
+      // Update phase to formatting if documents were generated
+      if (result.success || (result.summary && result.summary.successful > 0)) {
+        setGenerationPhase('formatting')
+      }
 
       // Log result regardless of success/failure
       console.log(`📊 API Response:`, result)
@@ -501,6 +508,7 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
       alert('❌ Failed to generate documents')
     } finally {
       setGeneratingDocs(false)
+      setGenerationPhase(null)
     }
   }
 
@@ -1085,7 +1093,9 @@ export default function ServiceDetailPage({ params }: { params: { serviceId: str
                     {generatingDocs ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        Regenerating...
+                        {generationPhase === 'generating' && 'Generating documents... (1-2 min)'}
+                        {generationPhase === 'formatting' && 'Formatting documents with AI... (30-60 sec)'}
+                        {!generationPhase && 'Regenerating...'}
                       </>
                     ) : (
                       <>

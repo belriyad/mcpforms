@@ -6,6 +6,7 @@ import { signOut } from '@/lib/auth'
 import { useRouter } from 'next/navigation'
 import { AdminLayoutWrapper } from '@/components/layout/AdminLayoutWrapper'
 import { PermissionsProvider } from '@/contexts/PermissionsContext'
+import { SubscriptionProvider } from '@/contexts/SubscriptionContext'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, userProfile } = useAuth()
@@ -18,15 +19,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <ProtectedRoute>
-      <PermissionsProvider>
-        <AdminLayoutWrapper
-          user={user || undefined}
-          userProfile={userProfile || undefined}
-          onSignOut={handleSignOut}
-        >
-          {children}
-        </AdminLayoutWrapper>
-      </PermissionsProvider>
+      <SubscriptionProvider>
+        <PermissionsProvider>
+          <AdminLayoutWrapper
+            user={user || undefined}
+            userProfile={userProfile || undefined}
+            onSignOut={handleSignOut}
+          >
+            {children}
+          </AdminLayoutWrapper>
+        </PermissionsProvider>
+      </SubscriptionProvider>
     </ProtectedRoute>
   )
 }

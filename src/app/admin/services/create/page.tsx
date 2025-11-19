@@ -30,7 +30,7 @@ interface Template {
   updatedAt?: any
 }
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3
 
 export default function CreateServicePage() {
   const router = useRouter()
@@ -49,10 +49,7 @@ export default function CreateServicePage() {
   // Step 2: Template Selection
   const [selectedTemplates, setSelectedTemplates] = useState<Set<string>>(new Set())
   
-  // Step 3: AI Customization (templates with AI sections)
-  const [aiSections, setAiSections] = useState<Record<string, {prompt: string, generating: boolean}>>({})
-  
-  // Step 4: Intake form preview
+  // Step 3: Intake form preview
   const [intakeForm, setIntakeForm] = useState<any>(null)
   const [generatingIntake, setGeneratingIntake] = useState(false)
 
@@ -86,8 +83,7 @@ export default function CreateServicePage() {
   const steps = [
     { number: 1, label: 'Service Details', icon: User },
     { number: 2, label: 'Select Templates', icon: FileText },
-    { number: 3, label: 'Customize', icon: Sparkles },
-    { number: 4, label: 'Review & Send', icon: CheckCircle2 }
+    { number: 3, label: 'Review & Send', icon: CheckCircle2 }
   ]
 
   const toggleTemplate = (templateId: string) => {
@@ -104,7 +100,7 @@ export default function CreateServicePage() {
   const canProceedFromStep2 = selectedTemplates.size > 0
 
   const handleNext = () => {
-    if (currentStep < 4) {
+    if (currentStep < 3) {
       setCurrentStep((currentStep + 1) as Step)
     }
   }
@@ -423,68 +419,8 @@ export default function CreateServicePage() {
             </div>
           )}
 
-          {/* Step 3: Customize (Placeholder) */}
+          {/* Step 3: Review & Send */}
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Customize Templates</h2>
-                <p className="text-gray-600">Add AI-generated sections or modify templates</p>
-              </div>
-
-              <div className="space-y-4">
-                {Array.from(selectedTemplates).map((templateId) => {
-                  const template = templates.find(t => t.id === templateId)
-                  if (!template) return null
-                  
-                  return (
-                    <div key={templateId} className="border border-gray-200 rounded-lg p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
-                        <div className="flex gap-2">
-                          <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                            Preview
-                          </button>
-                          <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                            Edit Fields
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <Sparkles className="w-5 h-5 text-purple-600 mt-0.5" />
-                          <div className="flex-1">
-                            <h4 className="font-medium text-gray-900 mb-2">AI Assistant</h4>
-                            <input
-                              type="text"
-                              placeholder="Describe a clause or section to add (e.g., 'Add clause to donate 50% of assets to charity')"
-                              className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent mb-3"
-                            />
-                            <button className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all text-sm font-medium">
-                              Generate with AI
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">Prototype Note</p>
-                    <p>AI customization will be fully functional in the next phase. For now, click "Next" to continue.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Review & Send */}
-          {currentStep === 4 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Review & Send Intake Form</h2>
@@ -585,7 +521,7 @@ export default function CreateServicePage() {
             Step {currentStep} of {steps.length}
           </div>
 
-          {currentStep < 4 ? (
+          {currentStep < 3 ? (
             <button
               onClick={handleNext}
               disabled={
