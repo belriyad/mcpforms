@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { collection, query, onSnapshot, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
+import { useSubscription } from '@/contexts/SubscriptionContext'
 import { useRouter } from 'next/navigation'
 import { 
   FileText, 
@@ -57,6 +58,7 @@ export default function ModernDashboard() {
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const { user, userProfile } = useAuth()
+  const { isPremium } = useSubscription()
   const router = useRouter()
 
   // Load stats
@@ -194,7 +196,8 @@ export default function ModernDashboard() {
       trendUp: true,
       path: '/admin/prompts'
     },
-    {
+    // Team Members - Premium only
+    ...(isPremium ? [{
       title: 'Team Members',
       value: stats.teamMembers,
       icon: Users,
@@ -204,7 +207,7 @@ export default function ModernDashboard() {
       trend: '0%',
       trendUp: false,
       path: '/admin/settings/users'
-    }
+    }] : [])
   ]
 
   const quickActions = [

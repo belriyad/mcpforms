@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { usePermissions } from '@/contexts/PermissionsContext'
+import { useSubscription } from '@/contexts/SubscriptionContext'
 import { useRouter } from 'next/navigation'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -36,6 +37,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { hasPermission } = usePermissions()
+  const { isPremium } = useSubscription()
   const [settings, setSettings] = useState<UserSettings>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -122,7 +124,8 @@ export default function SettingsPage() {
               Subscription & Billing
             </button>
             
-            {hasPermission('canManageUsers') && (
+            {/* Team Management - Premium Only */}
+            {isPremium && hasPermission('canManageUsers') && (
               <button
                 onClick={() => router.push('/admin/settings/users')}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
