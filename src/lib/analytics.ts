@@ -50,6 +50,11 @@ export type AnalyticsEventName =
   | 'template_viewed'
   | 'template_created'
   | 'template_uploaded'
+  | 'template_upload_file_selected'
+  | 'template_upload_validation_failed'
+  | 'template_upload_validation_passed'
+  | 'template_upload_progress'
+  | 'template_upload_parse_triggered'
   | 'template_edited'
   | 'template_deleted'
   | 'template_duplicated'
@@ -268,6 +273,16 @@ export const Analytics = {
     trackEvent('template_created', { templateId, templateName }),
   templateUploaded: (templateId: string, fileSize: number) =>
     trackEvent('template_uploaded', { templateId, value: fileSize }),
+  templateUploadFileSelected: (fileName: string, fileSize: number, fileType: string) =>
+    trackEvent('template_upload_file_selected', { label: fileName, value: fileSize, category: fileType }),
+  templateUploadValidationFailed: (reason: string, fileName: string, details?: any) =>
+    trackEvent('template_upload_validation_failed', { error_code: reason, label: fileName, ...details }),
+  templateUploadValidationPassed: (fileName: string, fileSize: number) =>
+    trackEvent('template_upload_validation_passed', { label: fileName, value: fileSize }),
+  templateUploadProgress: (templateId: string, progress: number, step: string) =>
+    trackEvent('template_upload_progress', { templateId, value: progress, label: step }),
+  templateUploadParseTriggered: (templateId: string) =>
+    trackEvent('template_upload_parse_triggered', { templateId }),
   templateEdited: (templateId: string) =>
     trackEvent('template_edited', { templateId }),
   templateDeleted: (templateId: string) =>
@@ -416,6 +431,28 @@ export const Funnel = {
     trackFunnelStep('onboarding', 'intake_sent', userId, { intakeId }),
   onboardingCompleted: (userId: string, documentId: string) =>
     trackFunnelStep('onboarding', 'completed', userId, { documentId }),
+  
+  // Template Upload Funnel
+  templateUploadStarted: (userId: string) =>
+    trackFunnelStep('template_upload', 'page_visited', userId),
+  templateUploadFileSelected: (userId: string, fileName: string, fileSize: number) =>
+    trackFunnelStep('template_upload', 'file_selected', userId, { fileName, fileSize }),
+  templateUploadNameEntered: (userId: string, templateName: string) =>
+    trackFunnelStep('template_upload', 'name_entered', userId, { templateName }),
+  templateUploadValidationPassed: (userId: string) =>
+    trackFunnelStep('template_upload', 'validation_passed', userId),
+  templateUploadFirestoreCreated: (userId: string, templateId: string) =>
+    trackFunnelStep('template_upload', 'firestore_created', userId, { templateId }),
+  templateUploadStorageUploaded: (userId: string, templateId: string) =>
+    trackFunnelStep('template_upload', 'storage_uploaded', userId, { templateId }),
+  templateUploadMetadataUpdated: (userId: string, templateId: string) =>
+    trackFunnelStep('template_upload', 'metadata_updated', userId, { templateId }),
+  templateUploadParsingTriggered: (userId: string, templateId: string) =>
+    trackFunnelStep('template_upload', 'parsing_triggered', userId, { templateId }),
+  templateUploadCompleted: (userId: string, templateId: string, duration: number) =>
+    trackFunnelStep('template_upload', 'completed', userId, { templateId, duration }),
+  templateUploadFailed: (userId: string, errorType: string, errorMessage: string) =>
+    trackFunnelStep('template_upload', 'failed', userId, { errorType, errorMessage }),
   
   // Document Generation Funnel
   docGenStarted: (serviceId: string, userId: string) =>

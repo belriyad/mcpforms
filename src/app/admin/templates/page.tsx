@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
+import { collection, query, onSnapshot, orderBy, where, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { usePermissions } from '@/contexts/PermissionsContext'
@@ -16,7 +16,8 @@ import {
   Upload,
   Loader2,
   Search,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -43,6 +44,7 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState<'all' | Template['status']>('all')
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const emptyErrorStatesEnabled = isFeatureEnabled('emptyErrorStates')
 
   // Load templates from Firestore
@@ -96,19 +98,47 @@ export default function TemplatesPage() {
       )
     : filteredTemplates
 
-  const formatFileSize = (bytes?: number) => {
+    const formatFileSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size'
     const kb = bytes / 1024
     const mb = kb / 1024
     return mb >= 1 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(2)} KB`
   }
 
-  const formatDate = (date: any) => {
-    if (!date) return 'Recently'
-    if (typeof date.toDate === 'function') {
-      return date.toDate().toLocaleDateString()
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'N/A'
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      }).format(date)
+    } catch {
+      return 'Invalid date'
     }
-    return new Date(date).toLocaleDateString()
+  }
+
+  const handleDelete = async (templateId: string, templateName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    if (!confirm(`Are you sure you want to delete "${templateName}"? This action cannot be undone.`)) {
+      return
+    }
+
+    setDeletingId(templateId)
+    
+    try {
+      await deleteDoc(doc(db, 'templates', templateId))
+      // TODO: Also delete associated storage file if needed
+      // const storageRef = ref(storage, `templates/${templateId}/...`)
+      // await deleteObject(storageRef)
+    } catch (err: any) {
+      console.error('Error deleting template:', err)
+      alert(`Failed to delete template: ${err.message}`)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
@@ -343,6 +373,18 @@ export default function TemplatesPage() {
                       >
                         <Eye className="w-4 h-4" />
                         View
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(template.id, template.name, e)}
+                        disabled={deletingId === template.id}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete template"
+                      >
+                        {deletingId === template.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
                   </div>

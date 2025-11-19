@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
+import { collection, query, onSnapshot, orderBy, where, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { 
@@ -12,7 +12,8 @@ import {
   Clock,
   Send,
   Eye,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchBar } from '@/components/ui/SearchBar'
@@ -41,6 +42,7 @@ export default function IntakesPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const emptyErrorStatesEnabled = isFeatureEnabled('emptyErrorStates')
 
   useEffect(() => {
@@ -117,6 +119,26 @@ export default function IntakesPage() {
         return { variant: 'info' as const, label: 'Viewed', icon: Eye }
       default:
         return { variant: 'warning' as const, label: 'Pending', icon: Clock }
+    }
+  }
+
+  const handleDelete = async (intakeId: string, serviceName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    if (!confirm(`Are you sure you want to delete the intake form for "${serviceName}"? This action cannot be undone.`)) {
+      return
+    }
+
+    setDeletingId(intakeId)
+    
+    try {
+      // Delete the service which contains the intake form
+      await deleteDoc(doc(db, 'services', intakeId))
+    } catch (err: any) {
+      console.error('Error deleting intake:', err)
+      alert(`Failed to delete intake: ${err.message}`)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -277,13 +299,27 @@ export default function IntakesPage() {
                               {intake.submittedAt ? formatDate(intake.submittedAt) : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <button
-                                onClick={() => router.push(`/admin/services/${intake.serviceId}`)}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                              >
-                                <Eye className="w-4 h-4" />
-                                View Service
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => router.push(`/admin/services/${intake.serviceId}`)}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  View Service
+                                </button>
+                                <button
+                                  onClick={(e) => handleDelete(intake.id, intake.serviceName || 'this service', e)}
+                                  disabled={deletingId === intake.id}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Delete intake"
+                                >
+                                  {deletingId === intake.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )

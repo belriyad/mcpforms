@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { PermissionGuard } from '@/components/auth/PermissionGuard'
@@ -9,6 +9,7 @@ import { db, storage, functions } from '@/lib/firebase'
 import { collection, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { httpsCallable } from 'firebase/functions'
+import { Analytics, Funnel, PerformanceTimer } from '@/lib/analytics'
 
 export default function UploadTemplatePage() {
   const router = useRouter()
@@ -20,25 +21,55 @@ export default function UploadTemplatePage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Track page view on mount
+  useEffect(() => {
+    Analytics.pageView('/admin/templates/upload', 'Upload Template')
+    
+    // Track funnel: User landed on upload page
+    if (user?.uid) {
+      Funnel.templateUploadStarted(user.uid)
+    }
+  }, [user?.uid])
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
+      // Track file selection
+      if (user?.uid) {
+        Funnel.templateUploadFileSelected(user.uid, selectedFile.name, selectedFile.size)
+        Analytics.templateUploadFileSelected(selectedFile.name, selectedFile.size, selectedFile.type)
+      }
+
       // Validate file type
       if (!selectedFile.name.endsWith('.docx')) {
-        setError('Please select a .docx file')
-        setFile(null)
+        setError('Only .docx files are supported')
+        if (user?.uid) {
+          Analytics.templateUploadValidationFailed('invalid_file_type', selectedFile.name, {
+            fileType: selectedFile.type
+          })
+        }
         return
       }
       
       // Validate file size (max 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
         setError('File size must be less than 10MB')
-        setFile(null)
+        if (user?.uid) {
+          Analytics.templateUploadValidationFailed('file_too_large', selectedFile.name, {
+            fileSize: selectedFile.size
+          })
+        }
         return
       }
       
       setFile(selectedFile)
       setError(null)
+      
+      // Track validation success
+      if (user?.uid) {
+        Funnel.templateUploadValidationPassed(user.uid)
+        Analytics.templateUploadValidationPassed(selectedFile.name, selectedFile.size)
+      }
       
       // Auto-fill template name from filename if empty
       if (!templateName) {
@@ -57,10 +88,21 @@ export default function UploadTemplatePage() {
     setUploading(true)
     setError(null)
     setUploadProgress(0)
+    
+    // Start performance timer
+    const timer = new PerformanceTimer('template_upload')
+    let templateId = ''
 
     try {
+      // Track name entered
+      if (user?.uid) {
+        Funnel.templateUploadNameEntered(user.uid, templateName.trim())
+      }
+
       // 1. Create template document in Firestore first to get template ID
       setUploadProgress(20)
+      Analytics.templateUploadProgress('', 20, 'firestore_creation_started')
+      
       const templateDoc = await addDoc(collection(db, 'templates'), {
         name: templateName.trim(),
         fileName: file.name,
@@ -71,8 +113,14 @@ export default function UploadTemplatePage() {
         updatedAt: serverTimestamp()
       })
       
-      const templateId = templateDoc.id
+      templateId = templateDoc.id
       console.log('Template document created with ID:', templateId)
+      
+      // Track Firestore creation success
+      if (user?.uid) {
+        Funnel.templateUploadFirestoreCreated(user.uid, templateId)
+      }
+      Analytics.templateUploadProgress(templateId, 20, 'firestore_created')
       
       // 2. Upload file to Firebase Storage using templateId
       // Path format: templates/{templateId}/{fileName}
@@ -81,13 +129,25 @@ export default function UploadTemplatePage() {
       const storageRef = ref(storage, `templates/${templateId}/${fileName}`)
       
       setUploadProgress(40)
+      Analytics.templateUploadProgress(templateId, 40, 'storage_upload_started')
+      
       await uploadBytes(storageRef, file)
       
+      // Track storage upload success
+      if (user?.uid) {
+        Funnel.templateUploadStorageUploaded(user.uid, templateId)
+      }
+      Analytics.templateUploadProgress(templateId, 40, 'storage_uploaded')
+      
       setUploadProgress(70)
+      Analytics.templateUploadProgress(templateId, 70, 'getting_download_url')
+      
       const downloadURL = await getDownloadURL(storageRef)
       
       // 3. Update template with storage info
       setUploadProgress(90)
+      Analytics.templateUploadProgress(templateId, 90, 'metadata_update_started')
+      
       await updateDoc(templateDoc, {
         storagePath: storageRef.fullPath,
         downloadURL,
@@ -95,7 +155,14 @@ export default function UploadTemplatePage() {
         updatedAt: serverTimestamp()
       })
       
+      // Track metadata update success
+      if (user?.uid) {
+        Funnel.templateUploadMetadataUpdated(user.uid, templateId)
+      }
+      Analytics.templateUploadProgress(templateId, 90, 'metadata_updated')
+      
       setUploadProgress(95)
+      Analytics.templateUploadProgress(templateId, 95, 'parsing_trigger_started')
       
       // 4. Trigger parsing via cloud function
       try {
@@ -106,13 +173,27 @@ export default function UploadTemplatePage() {
           filePath: storageRef.fullPath
         })
         console.log('Parsing triggered:', result.data)
+        
+        // Track parsing trigger success
+        if (user?.uid) {
+          Funnel.templateUploadParsingTriggered(user.uid, templateId)
+        }
+        Analytics.templateUploadParseTriggered(templateId)
       } catch (parseError: any) {
         console.warn('Parse trigger warning (will retry automatically):', parseError.message)
         // Don't fail the upload if parsing fails - it can be retried
       }
       
       setUploadProgress(100)
+      Analytics.templateUploadProgress(templateId, 100, 'completed')
       setSuccess(true)
+      
+      // Track completion with timing
+      const duration = timer.end()
+      if (user?.uid) {
+        Funnel.templateUploadCompleted(user.uid, templateId, duration)
+      }
+      Analytics.templateUploaded(templateId, file.size)
       
       console.log('Template uploaded successfully. Parsing in progress...')
       
@@ -128,14 +209,24 @@ export default function UploadTemplatePage() {
       console.error('Error details:', JSON.stringify(err, null, 2))
       
       let errorMessage = 'Failed to upload template'
+      let errorType = 'unknown_error'
       
       if (err.code === 'permission-denied') {
         errorMessage = 'Permission denied. You need lawyer or admin role to upload templates.'
+        errorType = 'permission_denied'
       } else if (err.code === 'storage/unauthorized') {
         errorMessage = 'Storage permission denied. Please check your permissions.'
+        errorType = 'storage_unauthorized'
       } else if (err.message) {
         errorMessage = err.message
+        errorType = err.code || 'api_error'
       }
+      
+      // Track failure
+      if (user?.uid) {
+        Funnel.templateUploadFailed(user.uid, errorType, errorMessage)
+      }
+      Analytics.errorOccurred(errorType, errorMessage, 'template_upload')
       
       setError(errorMessage)
       setUploading(false)

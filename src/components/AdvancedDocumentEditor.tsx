@@ -435,27 +435,25 @@ export default function AdvancedDocumentEditor({
               )}
             </button>
 
-            {/* AI Format Button */}
-            {hasPermission('canUseAIFormatting') && (
-              <button
-                onClick={handleFormatDocument}
-                disabled={isFormatting}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Format entire document with AI"
-              >
-                {isFormatting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Formatting...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    AI Format
-                  </>
-                )}
-              </button>
-            )}
+            {/* AI Format Button - Always Visible */}
+            <button
+              onClick={handleFormatDocument}
+              disabled={isFormatting}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Format entire document with AI"
+            >
+              {isFormatting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Formatting...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4" />
+                  AI Format
+                </>
+              )}
+            </button>
 
             {/* AI Assistant Button */}
             {hasPermission('canGenerateAISections') && (

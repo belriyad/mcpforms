@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore'
+import { collection, query, onSnapshot, orderBy, where, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { usePermissions } from '@/contexts/PermissionsContext'
@@ -19,7 +19,8 @@ import {
   Mail,
   ArrowRight,
   Loader2,
-  Search
+  Search,
+  Trash2
 } from 'lucide-react'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { StatsCard } from '@/components/ui/StatsCard'
@@ -55,6 +56,7 @@ export default function ServicesPage() {
   const [filter, setFilter] = useState<'all' | Service['status']>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const emptyErrorStatesEnabled = isFeatureEnabled('emptyErrorStates')
 
   // Load services from Firestore
@@ -135,6 +137,26 @@ export default function ServicesPage() {
         {config.label}
       </span>
     )
+  }
+
+  const handleDelete = async (serviceId: string, serviceName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    if (!confirm(`Are you sure you want to delete service "${serviceName}"? This will also delete associated intakes and documents. This action cannot be undone.`)) {
+      return
+    }
+
+    setDeletingId(serviceId)
+    
+    try {
+      await deleteDoc(doc(db, 'services', serviceId))
+      // TODO: Also delete associated intakes and documents if needed
+    } catch (err: any) {
+      console.error('Error deleting service:', err)
+      alert(`Failed to delete service: ${err.message}`)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
@@ -376,6 +398,19 @@ export default function ServicesPage() {
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     )}
+                    
+                    <button
+                      onClick={(e) => handleDelete(service.id, service.name, e)}
+                      disabled={deletingId === service.id}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Delete service"
+                    >
+                      {deletingId === service.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

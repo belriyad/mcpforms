@@ -33,11 +33,19 @@ service cloud.firestore {
     // User settings - users can read/write their own settings
     // Includes: prompts[], branding.logoUrl, branding.accentColor (MVP features #12, #18)
     match /userSettings/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAuthenticated(); // Allow all authenticated users to read branding for public intake
       allow write: if isOwner(userId);
     }
     
-    // Usage metrics - daily document generation counts (MVP feature #32)
+    // Usage stats - document generation metrics (MVP feature #32)
+    match /usageStats/{userId}/daily/{date} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated(); // Cloud Functions can create
+      allow update: if isAuthenticated(); // Cloud Functions can increment
+      allow delete: if isAdmin();
+    }
+    
+    // Legacy usage metrics path (deprecated, keeping for backward compatibility)
     match /usageDaily/{userId}/{date} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated(); // Cloud Functions can create

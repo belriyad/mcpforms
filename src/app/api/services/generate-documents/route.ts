@@ -10,7 +10,7 @@ import mammoth from 'mammoth'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { serviceId, useAI = true } = body // Default to AI generation
+    const { serviceId, useAI = true } = body // Use AI generation for templates without placeholders
 
     if (!serviceId) {
       return NextResponse.json(
@@ -36,10 +36,17 @@ export async function POST(request: NextRequest) {
       try {
         console.log('🤖 Delegating to AI cloud function...')
         
-        // Call the deployed cloud function
+        // Call the deployed cloud function with timeout
         const functionUrl = process.env.NODE_ENV === 'production' 
           ? 'https://us-central1-formgenai-4545.cloudfunctions.net/generateDocumentsWithAI'
-          : 'https://us-central1-formgenai-4545.cloudfunctions.net/generateDocumentsWithAI'; // Use production function even in dev
+          : 'https://us-central1-formgenai-4545.cloudfunctions.net/generateDocumentsWithAI';
+        
+        // Create AbortController for timeout (2 minutes for AI)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => {
+          console.error('⏱️ AI Cloud Function timeout after 120 seconds')
+          controller.abort()
+        }, 120000) // 120 second timeout for AI (it needs more time)
         
         const response = await fetch(functionUrl, {
           method: 'POST',
@@ -51,25 +58,56 @@ export async function POST(request: NextRequest) {
               intakeId: serviceId, // Pass serviceId as intakeId (our fix handles this)
               regenerate: true
             }
-          })
+          }),
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId)
         
         const result = await response.json();
         console.log('🤖 AI function result:', result);
         
         if (result.result?.success) {
+          // AI function succeeded - refresh service data to get the generated documents
+          console.log('✅ AI generation successful, refreshing service data...');
+          
+          const adminDb = getAdminDb();
+          const serviceDoc = await adminDb.collection('services').doc(serviceId).get();
+          
+          if (!serviceDoc.exists) {
+            return NextResponse.json(
+              { success: false, error: 'Service not found after generation' },
+              { status: 404 }
+            );
+          }
+          
+          const serviceData = serviceDoc.data();
+          const generatedDocuments = serviceData?.generatedDocuments || [];
+          
+          console.log(`📄 Found ${generatedDocuments.length} generated documents in service`);
+          
           return NextResponse.json({
             success: true,
             message: result.result.message || 'Documents generated with AI',
-            artifactIds: result.result.data?.artifactIds || []
+            artifactIds: result.result.data?.artifactIds || [],
+            documents: generatedDocuments.map((doc: any) => ({
+              id: doc.id,
+              name: doc.name,
+              downloadUrl: doc.downloadUrl,
+              createdAt: doc.createdAt
+            }))
           });
         } else {
           console.error('❌ AI generation failed:', result.result?.error);
           console.log('⚠️ Falling back to docxtemplater method...');
           // Fall through to docxtemplater method
         }
-      } catch (aiError) {
-        console.error('❌ AI generation error:', aiError);
+      } catch (aiError: any) {
+        if (aiError.name === 'AbortError') {
+          console.error('⏱️ AI generation timeout - falling back to docxtemplater');
+        } else {
+          console.error('❌ AI generation error:', aiError);
+        }
         console.log('⚠️ Falling back to docxtemplater method...');
         // Fall through to docxtemplater method
       }
@@ -399,7 +437,9 @@ export async function POST(request: NextRequest) {
       const successfulDocCount = generatedDocuments.filter(d => d.downloadUrl).length;
       if (successfulDocCount > 0 && service.createdBy) {
         const today = new Date().toISOString().split('T')[0];
-        const usageDocPath = `usageDaily/${service.createdBy}/${today}`;
+        // Fix: Firestore requires collection/document/collection/document pattern
+        // Use a subcollection under the user's usage stats
+        const usageDocPath = `usageStats/${service.createdBy}/daily/${today}`;
         const usageDocRef = adminDb.doc(usageDocPath);
         
         const usageSnapshot = await usageDocRef.get();
