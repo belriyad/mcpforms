@@ -17,7 +17,8 @@ import {
   Loader2,
   Search,
   Filter,
-  Trash2
+  Trash2,
+  Layers
 } from 'lucide-react'
 import { SearchBar } from '@/components/ui/SearchBar'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -152,13 +153,22 @@ export default function TemplatesPage() {
               <p className="text-gray-600">Upload and manage document templates</p>
             </div>
             <PermissionGuard permission="canUploadTemplates">
-              <button
-                onClick={() => router.push('/admin/templates/upload')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                <Upload className="w-5 h-5" />
-                Upload Template
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => router.push('/admin/templates/bulk-upload')}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  <Layers className="w-5 h-5" />
+                  Bulk Upload
+                </button>
+                <button
+                  onClick={() => router.push('/admin/templates/upload')}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  <Upload className="w-5 h-5" />
+                  Upload Single
+                </button>
+              </div>
             </PermissionGuard>
           </div>
         </div>
